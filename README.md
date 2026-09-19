@@ -60,6 +60,9 @@ An MCP server that connects AI assistants like Claude to LinkedIn through your o
 | `get_job_details` | Read the details of a LinkedIn job posting by its job ID. |
 | `get_feed` | Read recent home-feed posts, with links in `references`. |
 | `search_posts` | Search posts by keyword with optional recency filters; `references` contains unordered candidate post links. |
+| `react_to_post` | React to one post (like, celebrate, support, love, insightful, funny); refuses to click a reaction this account already gave, since that click would remove it |
+| `comment_on_post` | Publish a comment on one post (requires confirmation) |
+| `repost_post` | Reshare one post, bare or with your own commentary (requires confirmation) |
 | `close_session` | Close the active browser session and release its resources. |
 
 <br/>
