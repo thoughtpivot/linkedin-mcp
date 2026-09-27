@@ -125,7 +125,7 @@ async def test_the_skill_names_every_write_tool() -> None:
     writes = {
         tool.name
         for tool in tools
-        if tool.annotations is not None and tool.annotations.destructiveHint
+        if tool.annotations is not None and tool.annotations.destructive_hint
     }
 
     assert writes, "no tool declares itself destructive; the guard below is vacuous"

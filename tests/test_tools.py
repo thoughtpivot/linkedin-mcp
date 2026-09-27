@@ -1379,11 +1379,11 @@ class TestPostEngagementTools:
             assert tool is not None
             # What makes an MCP client prompt before running one of these.
             assert tool.annotations is not None
-            assert tool.annotations.destructiveHint is True
+            assert tool.annotations.destructive_hint is True
         search = await mcp.get_tool("search_posts")
         assert search is not None
         assert search.annotations is not None
-        assert search.annotations.readOnlyHint is True
+        assert search.annotations.read_only_hint is True
 
     @pytest.mark.parametrize(
         ("result", "warns"),

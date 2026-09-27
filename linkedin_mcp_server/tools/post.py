@@ -25,8 +25,10 @@ import logging
 from typing import Annotated, Any, Literal
 
 from fastmcp import Context, FastMCP
+from fastmcp.dependencies import Depends
 from fastmcp.exceptions import ToolError
 from pydantic import Field
+from uncalled_for import Dependency
 
 from linkedin_mcp_server.config.schema import DEFAULT_TOOL_TIMEOUT_SECONDS
 from linkedin_mcp_server.core.exceptions import AuthenticationError
@@ -40,6 +42,23 @@ from linkedin_mcp_server.scraping.contracts import (
 from linkedin_mcp_server.scraping.identifiers import normalize_post_reference
 
 logger = logging.getLogger(__name__)
+
+
+def _hidden_test_extractor() -> None:
+    # FastMCP omits a parameter whose default is Depends. Tests call the
+    # function and pass an extractor. A client call resolves None, and the
+    # tool opens its own. Leaving the parameter in the schema would offer
+    # that seam to the model.
+    return None
+
+
+def _caller_extractor(extractor: Any) -> Any | None:
+    # A direct call keeps the Depends default. The tool runner resolves it
+    # to None first. Either one means the tool should open its own extractor.
+    if isinstance(extractor, Dependency):
+        return None
+    return extractor
+
 
 Reaction = Literal["like", "celebrate", "support", "love", "insightful", "funny"]
 
@@ -139,13 +158,12 @@ def register_post_tools(
         title="React To Post",
         annotations={"destructiveHint": True, "openWorldHint": True},
         tags={"post", "actions"},
-        exclude_args=["extractor"],
     )
     async def react_to_post(
         post: str,
         ctx: Context,
         reaction: Reaction = "like",
-        extractor: Any | None = None,
+        extractor: Any | None = Depends(_hidden_test_extractor),
     ) -> dict[str, Any]:
         """
         React to one LinkedIn post, as the authenticated user.
@@ -181,7 +199,7 @@ def register_post_tools(
             is false can remove a reaction that did land.
         """
         try:
-            extractor = extractor or await get_ready_extractor(
+            extractor = _caller_extractor(extractor) or await get_ready_extractor(
                 ctx, tool_name="react_to_post"
             )
             logger.info("Reacting to post %s with %s", post, reaction)
@@ -212,14 +230,13 @@ def register_post_tools(
         title="Comment On Post",
         annotations={"destructiveHint": True, "openWorldHint": True},
         tags={"post", "actions"},
-        exclude_args=["extractor"],
     )
     async def comment_on_post(
         post: str,
         comment: str,
         confirm_comment: bool,
         ctx: Context,
-        extractor: Any | None = None,
+        extractor: Any | None = Depends(_hidden_test_extractor),
     ) -> dict[str, Any]:
         """
         Publish a comment on one LinkedIn post, as the authenticated user.
@@ -264,7 +281,7 @@ def register_post_tools(
             if refusal is not None:
                 return refusal
 
-            extractor = extractor or await get_ready_extractor(
+            extractor = _caller_extractor(extractor) or await get_ready_extractor(
                 ctx, tool_name="comment_on_post"
             )
             logger.info(
@@ -306,14 +323,13 @@ def register_post_tools(
         title="Repost Post",
         annotations={"destructiveHint": True, "openWorldHint": True},
         tags={"post", "actions"},
-        exclude_args=["extractor"],
     )
     async def repost_post(
         post: str,
         confirm_repost: bool,
         ctx: Context,
         commentary: str | None = None,
-        extractor: Any | None = None,
+        extractor: Any | None = Depends(_hidden_test_extractor),
     ) -> dict[str, Any]:
         """
         Reshare one LinkedIn post to this account's own feed.
@@ -359,7 +375,7 @@ def register_post_tools(
                 if refusal is not None:
                     return refusal
 
-            extractor = extractor or await get_ready_extractor(
+            extractor = _caller_extractor(extractor) or await get_ready_extractor(
                 ctx, tool_name="repost_post"
             )
             logger.info(
