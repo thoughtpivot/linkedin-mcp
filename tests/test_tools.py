@@ -862,11 +862,12 @@ class TestCompanyTools:
             "https://de.linkedin.com/company/testcorp/",
             mock_context,
         )
-        assert result["url"] == "https://www.linkedin.com/company/testcorp/posts/"
-        assert (
-            mock_extractor.extract_page.call_args.args[0]
-            == "https://www.linkedin.com/company/testcorp/posts/"
+        expected = (
+            "https://www.linkedin.com/company/testcorp"
+            "/posts/?viewAsMember=true&feedView=all"
         )
+        assert result["url"] == expected
+        assert mock_extractor.extract_page.call_args.args[0] == expected
 
     async def test_get_company_posts_refuses_a_traversal_value(
         self, mock_context, serve_extractor

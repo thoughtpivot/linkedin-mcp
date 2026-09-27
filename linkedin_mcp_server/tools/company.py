@@ -18,6 +18,7 @@ from linkedin_mcp_server.error_handler import raise_tool_error
 from linkedin_mcp_server.scraping import parse_company_sections
 from linkedin_mcp_server.scraping.contracts import RATE_LIMITED_SECTION_TEXT
 from linkedin_mcp_server.scraping.contracts import rate_limited_section_error
+from linkedin_mcp_server.scraping.fields import COMPANY_POSTS_SUFFIX
 from linkedin_mcp_server.scraping.identifiers import (
     company_page_url,
     normalize_company_identifier,
@@ -128,7 +129,7 @@ def register_company_tools(
                 progress=0, total=100, message="Starting company posts scrape"
             )
 
-            url = company_page_url(company_name, "/posts/")
+            url = company_page_url(company_name, COMPANY_POSTS_SUFFIX)
             extracted = await extractor.extract_page(url, section_name="posts")
 
             sections: dict[str, str] = {}
