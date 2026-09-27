@@ -1,11 +1,14 @@
 [project]
 name = "mcp-server-linkedin"
 version = "4.25.1"
-description = "MCP server that gives AI assistants like Claude access to LinkedIn profiles, companies, and job postings through the user's own browser session."
+description = "ThoughtPivot's LinkedIn MCP. Gives AI assistants LinkedIn access through the user's own browser session, forked from Daniel Sticker's project."
 readme = "README.md"
 requires-python = ">=3.12.4,<3.15"
 authors = [
     { name = "Daniel Sticker", email = "daniel@sticker.name" }
+]
+maintainers = [
+    { name = "ThoughtPivot" }
 ]
 license = "Apache-2.0"
 # Declared rather than left to setuptools' default globs, which happen to cover
@@ -56,11 +59,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/stickerdaniel/linkedin-mcp-server"
-Documentation = "https://github.com/stickerdaniel/linkedin-mcp-server#readme"
-Repository = "https://github.com/stickerdaniel/linkedin-mcp-server"
-Issues = "https://github.com/stickerdaniel/linkedin-mcp-server/issues"
-Changelog = "https://github.com/stickerdaniel/linkedin-mcp-server/releases"
+Homepage = "https://github.com/thoughtpivot/linkedin-mcp"
+Documentation = "https://github.com/thoughtpivot/linkedin-mcp#readme"
+Repository = "https://github.com/thoughtpivot/linkedin-mcp"
+Issues = "https://github.com/thoughtpivot/linkedin-mcp/issues"
+Changelog = "https://github.com/thoughtpivot/linkedin-mcp/releases"
 
 [project.scripts]
 mcp-server-linkedin = "linkedin_mcp_server.cli_main:main"

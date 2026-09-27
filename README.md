@@ -1,39 +1,29 @@
-# MCP Server for LinkedIn
-
-<!-- mcp-name: io.github.stickerdaniel/linkedin-mcp-server -->
+# LinkedIn MCP
 
 <p align="left">
-  <a href="https://pypi.org/project/mcp-server-linkedin/" target="_blank"><img src="https://img.shields.io/pypi/v/mcp-server-linkedin?color=blue" alt="PyPI"></a>
-  <a href="https://github.com/stickerdaniel/linkedin-mcp-server/actions/workflows/ci.yml" target="_blank"><img src="https://github.com/stickerdaniel/linkedin-mcp-server/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Status"></a>
-  <a href="https://github.com/stickerdaniel/linkedin-mcp-server/actions/workflows/release.yml" target="_blank"><img src="https://github.com/stickerdaniel/linkedin-mcp-server/actions/workflows/release.yml/badge.svg?branch=main" alt="Release"></a>
-  <a href="https://github.com/stickerdaniel/linkedin-mcp-server/blob/main/LICENSE" target="_blank"><img src="https://img.shields.io/badge/License-Apache%202.0-%233fb950?labelColor=32383f" alt="License"></a>
+  <a href="https://github.com/thoughtpivot/linkedin-mcp/blob/main/LICENSE" target="_blank"><img src="https://img.shields.io/badge/License-Apache%202.0-%233fb950?labelColor=32383f" alt="License"></a>
 </p>
 
-An MCP server that connects AI assistants like Claude to LinkedIn through your own logged-in browser session. Look up profiles and companies, send messages, engage with posts, manage your inbox, or search for jobs. All browser actions run locally on your machine.
+LinkedIn MCP is maintained by [ThoughtPivot](https://github.com/thoughtpivot), the intelligence layer for the built world. It is a public fork of [Daniel Sticker’s MCP server for LinkedIn](https://github.com/stickerdaniel/linkedin-mcp-server). That project’s copyright stays with Daniel Sticker; see [NOTICE](NOTICE) and [LICENSE](LICENSE).
+
+It connects AI assistants to LinkedIn through your own logged-in browser session. This fork keeps upstream’s read tools and adds the engagement tools the released upstream server does not ship: react, comment, and repost.
 
 > This is an independent open-source project, not affiliated with, authorized by, endorsed by, or sponsored by LinkedIn or Microsoft. LinkedIn is a trademark of LinkedIn Corporation and is used here only to identify the service this software interacts with.
 
-<br/>
-<details open>
-<summary><strong>LinkedIn MCP Sponsor</strong></summary>
-<br/>
-<a href="https://golink.onl/unipile-banner" target="_blank">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/c2e7f3b4-6812-4f28-8728-10f882a44e0e">
-    <img src="https://github.com/user-attachments/assets/89ab8932-ae79-41c2-8416-a699e924218b" alt="Unipile, one API for every LinkedIn feature" width="100%">
-  </picture>
-</a>
+## What it is for
 
-> This MCP server is supported by [**Unipile**](https://golink.onl/unipile-link). Unipile is the fully managed cloud option for developers: a hosted LinkedIn API for Classic, Sales Navigator, and Recruiter that handles auth, sessions, and infrastructure for you.
-
-[Try Unipile free for 7 days →](https://golink.onl/unipile-free-trial)
-</details>
+- **Build in public.** Read the home feed and search posts, then react, comment, or repost one post at a time. Comment and repost publish only after an explicit confirmation flag. A reaction this account already gave is refused, because clicking it again would remove it.
+- **Work the network.** Look up people and companies, pull sidebar profile recommendations, and send or accept a connection request.
+- **Hold the conversation.** Read the inbox, search threads, and send a message.
+- **Research the built world.** Read company pages, employees, and people for partnership and industry outreach.
 
 ---
 
 <a id="installation-methods"></a>
 
-## Installation Methods - LinkedIn MCP Server
+## Installation Methods - LinkedIn MCP
+
+Install this fork from GitHub, as in [Setup with uvx](#setup-with-uvx-recommended) or [Setup from Source](#setup-from-source-develop--contribute). `mcp-server-linkedin` on PyPI is Daniel Sticker’s package. The MCP bundle, Codex plugin, and Docker image further down are upstream releases too, and they do not include this fork’s engagement tools.
 
 [![uvx](https://img.shields.io/badge/uvx-Quick_Install-de5fe9?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDEiIGhlaWdodD0iNDEiIHZpZXdCb3g9IjAgMCA0MSA0MSIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTS01LjI4NjE5ZS0wNiAwLjE2ODYyOUwwLjA4NDMwOTggMjAuMTY4NUwwLjE1MTc2MiAzNi4xNjgzQzAuMTYxMDc1IDM4LjM3NzQgMS45NTk0NyA0MC4xNjA3IDQuMTY4NTkgNDAuMTUxNEwyMC4xNjg0IDQwLjA4NEwzMC4xNjg0IDQwLjA0MThMMzEuMTg1MiA0MC4wMzc1QzMzLjM4NzcgNDAuMDI4MiAzNS4xNjgzIDM4LjIwMjYgMzUuMTY4MyAzNlYzNkwzNy4wMDAzIDM2TDM3LjAwMDMgMzkuOTk5Mkw0MC4xNjgzIDM5Ljk5OTZMMzkuOTk5NiAtOS45NDY1M2UtMDdMMjEuNTk5OCAwLjA3NzU2ODlMMjEuNjc3NCAxNi4wMTg1TDIxLjY3NzQgMjUuOTk5OEwyMC4wNzc0IDI1Ljk5OThMMTguMzk5OCAyNS45OTk4TDE4LjQ3NzQgMTYuMDMyTDE4LjM5OTggMC4wOTEwNTkzTC01LjI4NjE5ZS0wNiAwLjE2ODYyOVoiIGZpbGw9IiNERTVGRTkiLz4KPC9zdmc+Cg==)](#setup-with-uvx-recommended)
 [![Install MCP Bundle](https://img.shields.io/badge/Claude_Desktop_MCPB-d97757?style=for-the-badge&logo=anthropic)](#claude-desktop-mcp-bundle-formerly-dxt)
@@ -101,21 +91,25 @@ Comment and commentary text may include newlines. Other control characters are r
 ```json
 {
   "mcpServers": {
-    "mcp-server-linkedin": {
+    "linkedin-mcp": {
       "command": "uvx",
-      "args": ["mcp-server-linkedin@latest"],
+      "args": [
+        "--from",
+        "git+https://github.com/thoughtpivot/linkedin-mcp",
+        "mcp-server-linkedin"
+      ],
       "env": { "UV_HTTP_TIMEOUT": "300" }
     }
   }
 }
 ```
 
-The `@latest` tag turns on automatic updates, which keep the server working with LinkedIn's current page structure. The server starts quickly and prepares the shared Patchright Chromium browser cache in the background under `~/.linkedin-mcp/patchright-browsers`. On the first tool call that needs authentication, it reuses a LinkedIn session from a signed-in local browser if it finds one, and otherwise opens a LinkedIn login browser window.
+`uvx mcp-server-linkedin@latest` installs the upstream package from PyPI, not this fork. The command name stays `mcp-server-linkedin` because that is still the Python package name.
 
-AI agent? Get a quick confirmation from the user before enabling automatic updates.
+The server starts quickly and prepares the shared Patchright Chromium browser cache in the background under `~/.linkedin-mcp/patchright-browsers`. On the first tool call that needs authentication, it reuses a LinkedIn session from a signed-in local browser if it finds one, and otherwise opens a LinkedIn login browser window.
 
 > [!NOTE]
-> Early tool calls may return a setup/authentication-in-progress error until browser setup or login finishes. If you prefer to create a session explicitly, run `uvx mcp-server-linkedin@latest --login`.
+> Early tool calls may return a setup/authentication-in-progress error until browser setup or login finishes. If you prefer to create a session explicitly, run `uvx --from git+https://github.com/thoughtpivot/linkedin-mcp mcp-server-linkedin --login`.
 
 ### Setup Help
 
@@ -733,8 +727,8 @@ Contributions are welcome. See [CONTRIBUTING.md](https://github.com/stickerdanie
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/stickerdaniel/linkedin-mcp-server
-cd linkedin-mcp-server
+git clone https://github.com/thoughtpivot/linkedin-mcp
+cd linkedin-mcp
 
 # 2. Install UV package manager (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -914,6 +908,8 @@ uv run -m linkedin_mcp_server --transport streamable-http --host 127.0.0.1 --por
 
 ## Acknowledgements
 
+This repository is ThoughtPivot’s fork of [Daniel Sticker’s linkedin-mcp-server](https://github.com/stickerdaniel/linkedin-mcp-server). Copyright 2025-2026 Daniel Sticker.
+
 Built with [FastMCP](https://gofastmcp.com/) and [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-python).
 
 Use in accordance with [LinkedIn's User Agreement](https://www.linkedin.com/legal/user-agreement). Automated access may violate LinkedIn's terms and can lead to account restrictions. This tool is for personal use only and comes with no warranty of any kind.
@@ -922,6 +918,6 @@ Use in accordance with [LinkedIn's User Agreement](https://www.linkedin.com/lega
 
 This project is licensed under the Apache 2.0 license.
 
-Building on this project is welcome! See the [license](https://github.com/stickerdaniel/linkedin-mcp-server/blob/main/LICENSE) for terms and the [`NOTICE`](https://github.com/stickerdaniel/linkedin-mcp-server/blob/main/NOTICE) for attribution.
+Building on this project is welcome! See the [license](LICENSE) for terms and the [`NOTICE`](NOTICE) for attribution.
 
 <br>

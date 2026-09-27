@@ -58,10 +58,6 @@ _DOCKERFILE = _REPO_ROOT / "Dockerfile"
 # from the account, not chosen, so a name outside it cannot be published at all.
 _NAMESPACE = "io.github.stickerdaniel"
 
-# Characters that may continue a server name, from the schema's own pattern
-# ^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$ plus the separating slash.
-_SERVER_NAME_CHAR = re.compile(r"[A-Za-z0-9._/-]")
-
 
 @pytest.fixture(scope="module")
 def server() -> dict[str, Any]:
@@ -84,21 +80,6 @@ def _package(server: dict[str, Any], registry_type: str) -> dict[str, Any]:
     return matches[0]
 
 
-def _terminates_token(rest: str) -> bool:
-    """Whether what follows a matched server name ends the token.
-
-    Mirrors ``isMCPNameBoundary``. The comment-close cases are not decoration:
-    ``<!-- mcp-name: NAME-->`` with no space before the close is common enough
-    that the registry special-cases it, and without them the hidden-comment form
-    the PyPI docs recommend would fail its own validator.
-    """
-    if not rest:
-        return True
-    if not _SERVER_NAME_CHAR.match(rest[0]):
-        return True
-    return rest.startswith("-->") or rest.startswith("--!>")
-
-
 def test_name_sits_in_the_authenticated_namespace(server: dict[str, Any]) -> None:
     assert server["name"].startswith(f"{_NAMESPACE}/")
 
@@ -112,19 +93,18 @@ def test_description_fits_the_registry_limit(server: dict[str, Any]) -> None:
     assert len(server["description"]) <= 100
 
 
-def test_readme_carries_a_terminated_ownership_token(server: dict[str, Any]) -> None:
-    """PyPI ownership is proved by a token in the README, or not at all."""
-    name = server["name"]
-    token = f"mcp-name: {name}"
-    readme = _README.read_text(encoding="utf-8")
+def test_readme_does_not_claim_upstream_registry_ownership(
+    server: dict[str, Any],
+) -> None:
+    """This fork must not carry the upstream registry token.
 
-    occurrences = [m.end() for m in re.finditer(re.escape(token), readme)]
-    assert occurrences, f"README.md must contain {token!r}"
-    assert any(_terminates_token(readme[end:]) for end in occurrences), (
-        f"README.md contains {token!r}, but every occurrence is glued to a "
-        "character that continues a server name. Put it on its own line, or "
-        "close the HTML comment right after it."
-    )
+    ``server.json`` still names the original project, because that official
+    registry entry is not this fork's to publish. A ``mcp-name`` token with
+    that name in README.md would tell the registry this repository owns it.
+    """
+    token = f"mcp-name: {server['name']}"
+    readme = _README.read_text(encoding="utf-8")
+    assert token not in readme
 
 
 def test_readme_is_the_published_package_description(pyproject: dict[str, Any]) -> None:
