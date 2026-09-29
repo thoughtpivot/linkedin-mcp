@@ -1,4 +1,4 @@
-# LinkedIn MCP
+# ThoughtPivot LinkedIn MCP
 
 <p align="left">
   <a href="https://github.com/thoughtpivot/linkedin-mcp/blob/main/LICENSE" target="_blank"><img src="https://img.shields.io/badge/License-Apache%202.0-%233fb950?labelColor=32383f" alt="License"></a>
@@ -78,12 +78,12 @@ Comment and commentary text may include newlines. Other control characters are r
 
 #### Cursor
 
-Create [`~/.cursor/mcp.json`](https://cursor.com/docs/mcp) for every project, or `.cursor/mcp.json` in one project. Cursor Settings → Tools & MCP edits the same file.
+Add the server as `thoughtpivot-linkedin-mcp`; that is the name Cursor shows in Settings → Tools & MCP. Put it in [`~/.cursor/mcp.json`](https://cursor.com/docs/mcp) for every project, or `.cursor/mcp.json` in one project. The settings page edits the same file.
 
 ```json
 {
   "mcpServers": {
-    "linkedin-mcp": {
+    "thoughtpivot-linkedin-mcp": {
       "command": "uvx",
       "args": [
         "--from",
@@ -96,7 +96,7 @@ Create [`~/.cursor/mcp.json`](https://cursor.com/docs/mcp) for every project, or
 }
 ```
 
-Toggle the server in Tools & MCP if it does not appear.
+If `thoughtpivot-linkedin-mcp` does not appear, toggle it in Tools & MCP. After pulling a new version of the repository, toggle it off and on again so Cursor restarts the server process; a running process keeps the old code.
 
 #### Claude Desktop
 
@@ -107,15 +107,15 @@ Claude Desktop uses that same JSON. On macOS it lives in `~/Library/Application 
 The Codex CLI and the IDE extension share [`~/.codex/config.toml`](https://developers.openai.com/codex/config-reference). A project file at `.codex/config.toml` applies to that project once the directory is trusted.
 
 ```toml
-[mcp_servers.linkedin-mcp]
+[mcp_servers.thoughtpivot-linkedin-mcp]
 command = "uvx"
 args = ["--from", "git+https://github.com/thoughtpivot/linkedin-mcp", "mcp-server-linkedin"]
 
-[mcp_servers.linkedin-mcp.env]
+[mcp_servers.thoughtpivot-linkedin-mcp.env]
 UV_HTTP_TIMEOUT = "300"
 ```
 
-Or from a terminal: `codex mcp add linkedin-mcp --env UV_HTTP_TIMEOUT=300 -- uvx --from git+https://github.com/thoughtpivot/linkedin-mcp mcp-server-linkedin`.
+Or from a terminal: `codex mcp add thoughtpivot-linkedin-mcp --env UV_HTTP_TIMEOUT=300 -- uvx --from git+https://github.com/thoughtpivot/linkedin-mcp mcp-server-linkedin`.
 
 #### VS Code
 
@@ -124,7 +124,7 @@ VS Code reads [`.vscode/mcp.json`](https://code.visualstudio.com/docs/agent-cust
 ```json
 {
   "servers": {
-    "linkedin-mcp": {
+    "thoughtpivot-linkedin-mcp": {
       "type": "stdio",
       "command": "uvx",
       "args": [
@@ -160,7 +160,7 @@ To run the clone instead of `uvx`, use the same client file and swap the launche
 ```json
 {
   "mcpServers": {
-    "linkedin-mcp": {
+    "thoughtpivot-linkedin-mcp": {
       "command": "uv",
       "args": ["--directory", "/absolute/path/to/linkedin-mcp", "run", "-m", "linkedin_mcp_server"]
     }
@@ -222,7 +222,7 @@ Spell the host path out in full. A client runs `docker` directly rather than thr
 ```json
 {
   "mcpServers": {
-    "linkedin-mcp": {
+    "thoughtpivot-linkedin-mcp": {
       "command": "docker",
       "args": [
         "run", "--rm", "-i",
