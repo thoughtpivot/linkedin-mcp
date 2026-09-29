@@ -1,0 +1,1 @@
+`send_message` no longer answers `recipient_resolution_failed` on every profile. LinkedIn redirects `/in/<id>/` to `/in/<id>/?isSelfProfile=false`, and the recipient resolver refused any profile URL carrying a query string.

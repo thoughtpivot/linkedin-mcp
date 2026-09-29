@@ -89,7 +89,12 @@ class TestMessageTargetUrls:
             ("https://www.linkedin.com:444/in/testuser/", None),
             ("https://www.linkedin.com/in/testuser/edit/intro/", None),
             ("https://www.linkedin.com/in/testuser%2Fedit/", None),
-            ("https://www.linkedin.com/in/testuser/?trk=profile", None),
+            ("https://www.linkedin.com/in/testuser/?trk=profile", "/in/testuser/"),
+            (
+                "https://www.linkedin.com/in/testuser/?isSelfProfile=false",
+                "/in/testuser/",
+            ),
+            ("https://www.linkedin.com/in/testuser/?isSelfProfile=false#x", None),
             ("https://www.linkedin.com/in/testuser/#details", None),
         ],
     )
@@ -180,6 +185,36 @@ class TestReadProfileMessageTarget:
         assert resolution.target is not None
         assert resolution.target.profile_path == "/in/canonical-user/"
         assert resolution.target.profile_urn == "ACoAAB"
+
+    async def test_accepts_the_is_self_profile_redirect(self, mock_page):
+        # LinkedIn redirects every foreign profile to ?isSelfProfile=false, and
+        # the probe reports that URL. Measured 2026-09-29 on the message sender's
+        # own send path: the scan resolved, the resolver still answered failed.
+        mock_page.evaluate = AsyncMock(
+            return_value={
+                "status": "resolved",
+                "pageUrl": "https://www.linkedin.com/in/twoodman/?isSelfProfile=false",
+                "displayName": "Tom Woodman",
+                "composeHrefs": [
+                    "/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3AACoAAB"
+                    "&recipient=ACoAAB&screenContext=NON_SELF_PROFILE_VIEW"
+                    "&interop=msgOverlay"
+                ],
+            }
+        )
+
+        resolution = await _sender(mock_page)._read_profile_message_target()
+
+        assert resolution.status == "resolved"
+        assert resolution.target is not None
+        assert resolution.target.profile_path == "/in/twoodman/"
+        assert resolution.target.profile_urn == "ACoAAB"
+        assert resolution.target.compose_url == (
+            "https://www.linkedin.com/messaging/compose/"
+            "?profileUrn=urn%3Ali%3Afsd_profile%3AACoAAB"
+            "&recipient=ACoAAB&screenContext=NON_SELF_PROFILE_VIEW"
+            "&interop=msgOverlay"
+        )
 
 
 class TestSendMessage:

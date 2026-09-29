@@ -959,8 +959,17 @@ def _normalize_profile_urn(value: str | None) -> str | None:
 
 
 def _profile_path_from_url(value: str) -> str | None:
+    """The canonical ``/in/<id>/`` path of a profile page URL, or ``None``.
+
+    The query string is ignored. LinkedIn redirects ``/in/<id>/`` to
+    ``/in/<id>/?isSelfProfile=false`` on every profile that is not the
+    account's own (measured 2026-09-29), and the top-card probe reports
+    ``window.location.href`` with that query attached. Refusing a query here
+    therefore refused every recipient. Only the path names the profile; the
+    recipient itself is read from the compose link, never from this URL.
+    """
     parsed = _safe_linkedin_url(value)
-    if parsed is None or parsed.query or not _PROFILE_PATH_RE.fullmatch(parsed.path):
+    if parsed is None or not _PROFILE_PATH_RE.fullmatch(parsed.path):
         return None
     try:
         username = normalize_person_identifier(value)
@@ -1047,16 +1056,29 @@ class MessageSender:
             return _ProfileMessageTargetResolution("failed")
         profile_path = _profile_path_from_url(page_url)
         if profile_path is None:
+            logger.debug(
+                "Profile Message action found, but the page URL is not a profile: %s",
+                page_url,
+            )
             return _ProfileMessageTargetResolution("failed")
         if len(compose_hrefs) != 1 or not isinstance(compose_hrefs[0], str):
             return _ProfileMessageTargetResolution("failed")
 
         parsed_compose = _safe_linkedin_url(compose_hrefs[0], base=page_url)
         if parsed_compose is None:
+            logger.debug(
+                "Profile Message action found, but its link is not a LinkedIn URL: %s",
+                compose_hrefs[0],
+            )
             return _ProfileMessageTargetResolution("failed")
         compose_url = parsed_compose.geturl()
         profile_urn = _profile_urn_from_compose_url(compose_url)
         if profile_urn is None:
+            logger.debug(
+                "Profile Message action found, but its link names no single "
+                "recipient: %s",
+                compose_url,
+            )
             return _ProfileMessageTargetResolution("failed")
 
         display_name = data.get("displayName")
