@@ -1417,53 +1417,20 @@ class TestWritingText:
             read,
         )
 
-    async def test_repost_dialog_does_not_click_a_preexisting_unlabelled_button(
+    async def test_repost_dialog_clicks_its_one_unlabelled_button(
         self, dom_page
     ) -> None:
-        def build(labels: Labels) -> str:
-            return current_composer_dialog(labels).replace(
-                "<dialog open>",
-                '<dialog open><button type="button" '
-                'onclick="document.body.setAttribute('
-                "'data-clicked','preexisting-dialog-control')\">"
-                "<span>close</span></button>",
-            )
-
-        async def read(page, html):
-            await page.set_content(_page_html(html))
-            dialog = await page.evaluate_handle(PIN_VISIBLE_DIALOG_JS)
-            pinned = await page.evaluate_handle(
-                PIN_EDITOR_JS, arg={"scope": dialog.as_element()}
-            )
-            editor = (await pinned.get_property("editor")).as_element()
-            await editor.click()
-            await page.keyboard.type("Worth a read")
-            await page.evaluate(
-                OWN_EDITOR_JS, {"editor": editor, "text": "Worth a read"}
-            )
-            outcome = await page.evaluate(
-                SUBMIT_EDITOR_JS,
-                {"scope": dialog.as_element(), "text": "Worth a read"},
-            )
-            return (outcome, await _clicked(page))
-
-        await _in_every_locale(dom_page, build, ("no_submit_control", None), read)
-
-    async def test_repost_dialog_clicks_the_control_that_becomes_enabled(
-        self, dom_page
-    ) -> None:
-        # The live failure. LinkedIn draws the commentary Post control with the
-        # dialog, disabled, and enables that same node once the editor holds
-        # text. A rule that only accepts a button absent from the pre-type
-        # baseline never sees it. The label is present on purpose: the
-        # discriminator is the enabled transition, not the wording.
+        # Measured on a live commentary composer: the Post control is already
+        # enabled when the dialog opens, because the reshared post is attached.
+        # It is the one button with no label and no SVG. The others are labelled
+        # and carry an SVG, which is what keeps a photo or close control out.
         def build(labels: Labels) -> str:
             return current_composer_dialog(labels).replace(
                 "<div data-submit-slot></div>",
                 "<div data-submit-slot>"
-                '<button type="button" disabled aria-label="submit-label" '
+                '<button type="button" '
                 'onclick="document.body.setAttribute('
-                "'data-clicked','enabled-repost-submit')\">"
+                "'data-clicked','repost-submit')\">"
                 "<span>submit</span></button></div>",
             )
 
@@ -1479,21 +1446,15 @@ class TestWritingText:
             await page.evaluate(
                 OWN_EDITOR_JS, {"editor": editor, "text": "Worth a read"}
             )
-            await page.evaluate(
-                "() => { document.querySelector('[data-submit-slot] button')"
-                ".disabled = false; }"
-            )
             outcome = await page.evaluate(
                 SUBMIT_EDITOR_JS,
                 {"scope": dialog.as_element(), "text": "Worth a read"},
             )
             return (outcome, await _clicked(page))
 
-        await _in_every_locale(
-            dom_page, build, ("submitted", "enabled-repost-submit"), read
-        )
+        await _in_every_locale(dom_page, build, ("submitted", "repost-submit"), read)
 
-    async def test_two_controls_becoming_enabled_click_neither(self, dom_page) -> None:
+    async def test_two_unlabelled_dialog_buttons_click_neither(self, dom_page) -> None:
         def build(labels: Labels) -> str:
             buttons = "".join(
                 '<button type="button" disabled><span>submit</span></button>'

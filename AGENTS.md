@@ -39,8 +39,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
  typing alone and confirms a comment that was never sent. Nor is a click this
  server chose to make. A submit control is either `type="submit"`, the sole
  control in the exact SDUI three-to-four transition recorded around real key
-  events, or the one non-SVG button in the pinned repost dialog that was not
-  already enabled before typing; never fall back to an enabled button by elimination,
+  events, or the one unlabeled non-SVG button in the pinned repost dialog;
+  never fall back to an enabled button by elimination,
   because an untouched comment
  box offers a photo button as that candidate. Both mistakes shipped together
  and reported two comments published on posts that had none.

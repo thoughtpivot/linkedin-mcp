@@ -730,22 +730,6 @@ PIN_EDITOR_JS = (
   const scopeButtons = scope instanceof Element
     ? Array.from(scope.querySelectorAll('button')).filter(visible)
     : [];
-  // An already-enabled non-SVG button is a standing control (close, and on a
-  // comment box the photo button). The repost submit is the one that is not
-  // enabled yet. Marking it here is what lets a later enable be told from a
-  // control that was clickable before any text existed.
-  for (const button of scopeButtons) {
-    if (
-      !button.disabled &&
-      (button.getAttribute('aria-disabled') || '').toLowerCase() !== 'true' &&
-      button.type === 'button' &&
-      !button.hasAttribute('aria-expanded') &&
-      !button.hasAttribute('aria-pressed') &&
-      !button.querySelector('svg')
-    ) {
-      button.__linkedinMcpWasEnabledBare = true;
-    }
-  }
   let controls = editor.parentElement;
   while (controls && scope.contains(controls)) {
     const buttons = Array.from(controls.querySelectorAll('button')).filter(visible);
@@ -802,12 +786,14 @@ CLEAR_EDITOR_JS = r"""
 # composer instead starts with three labelled SVG controls, then appends one
 # unlabeled, non-SVG `type="button"` after real key events. That exact 3-to-4
 # transition identifies the new submit control without reading a label. The
-# pinned repost dialog's submit control is the one non-SVG `type="button"` that
-# was not already enabled before typing: LinkedIn renders it with the dialog
-# and only enables it once the editor holds text, so "absent from the baseline"
-# never sees it. A control that was already enabled is not it. Neither rule is
-# relaxed to "the only enabled button": the untouched photo control is
-# labelled, contains an SVG, and exists in the recorded baseline.
+# pinned repost dialog's submit control is its one enabled unlabeled non-SVG
+# `type="button"`. Measured on a commentary composer: three buttons, all
+# enabled before typing, two labelled and carrying an SVG, and the remaining
+# one neither. Requiring the button to be absent or disabled before typing
+# misses it, because the reshare is already attached and the control is live.
+# Two such buttons refuses. Neither rule is relaxed to "the only enabled
+# button": the untouched photo control is labelled, contains an SVG, and
+# exists in the recorded baseline.
 #
 # The submit control is also absent until the editor holds text LinkedIn
 # believes a human entered, which is why `_type_text` uses real key events.
@@ -858,11 +844,11 @@ SUBMIT_EDITOR_JS = (
       visible(button) &&
       !button.disabled &&
       (button.getAttribute('aria-disabled') || '').toLowerCase() !== 'true' &&
+      !button.hasAttribute('aria-label') &&
       !button.hasAttribute('aria-expanded') &&
       !button.hasAttribute('aria-pressed') &&
       !button.querySelector('svg') &&
-      baseline &&
-      !button.__linkedinMcpWasEnabledBare
+      baseline
     );
     if (dialogCandidates.length > 1) return 'ambiguous_submit';
     if (dialogCandidates.length === 1) {
@@ -932,6 +918,9 @@ DESCRIBE_DIALOG_BUTTONS_JS = (
     typeButton: buttons.filter(button => button.type === 'button').length,
     typeSubmit: buttons.filter(button => button.type === 'submit').length,
     labelled: buttons.filter(button => button.hasAttribute('aria-label')).length,
+    unlabeledNoSvg: buttons.filter(button =>
+      !button.hasAttribute('aria-label') && !button.querySelector('svg')
+    ).length,
     svg: buttons.filter(button => button.querySelector('svg')).length,
     disabledAttr: buttons.filter(button => button.disabled).length,
     roleButtons: Array.from(
@@ -1598,6 +1587,7 @@ class PostActions:
                             f" {shape.get('typeButton')} type=button,"
                             f" {shape.get('typeSubmit')} type=submit,"
                             f" {shape.get('labelled')} labelled,"
+                            f" {shape.get('unlabeledNoSvg')} unlabeled without an svg,"
                             f" {shape.get('svg')} with an svg,"
                             f" {shape.get('disabledAttr')} disabled,"
                             f" {shape.get('roleButtons')} role=button."
