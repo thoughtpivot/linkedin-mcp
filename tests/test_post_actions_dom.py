@@ -1449,6 +1449,85 @@ class TestWritingText:
 
         await _in_every_locale(dom_page, build, ("no_submit_control", None), read)
 
+    async def test_repost_dialog_clicks_the_control_that_becomes_enabled(
+        self, dom_page
+    ) -> None:
+        # The live failure. LinkedIn draws the commentary Post control with the
+        # dialog, disabled, and enables that same node once the editor holds
+        # text. A rule that only accepts a button absent from the pre-type
+        # baseline never sees it. The label is present on purpose: the
+        # discriminator is the enabled transition, not the wording.
+        def build(labels: Labels) -> str:
+            return current_composer_dialog(labels).replace(
+                "<div data-submit-slot></div>",
+                "<div data-submit-slot>"
+                '<button type="button" disabled aria-label="submit-label" '
+                'onclick="document.body.setAttribute('
+                "'data-clicked','enabled-repost-submit')\">"
+                "<span>submit</span></button></div>",
+            )
+
+        async def read(page, html):
+            await page.set_content(_page_html(html))
+            dialog = await page.evaluate_handle(PIN_VISIBLE_DIALOG_JS)
+            pinned = await page.evaluate_handle(
+                PIN_EDITOR_JS, arg={"scope": dialog.as_element()}
+            )
+            editor = (await pinned.get_property("editor")).as_element()
+            await editor.click()
+            await page.keyboard.type("Worth a read")
+            await page.evaluate(
+                OWN_EDITOR_JS, {"editor": editor, "text": "Worth a read"}
+            )
+            await page.evaluate(
+                "() => { document.querySelector('[data-submit-slot] button')"
+                ".disabled = false; }"
+            )
+            outcome = await page.evaluate(
+                SUBMIT_EDITOR_JS,
+                {"scope": dialog.as_element(), "text": "Worth a read"},
+            )
+            return (outcome, await _clicked(page))
+
+        await _in_every_locale(
+            dom_page, build, ("submitted", "enabled-repost-submit"), read
+        )
+
+    async def test_two_controls_becoming_enabled_click_neither(self, dom_page) -> None:
+        def build(labels: Labels) -> str:
+            buttons = "".join(
+                '<button type="button" disabled><span>submit</span></button>'
+                for _ in range(2)
+            )
+            return current_composer_dialog(labels).replace(
+                "<div data-submit-slot></div>",
+                f"<div data-submit-slot>{buttons}</div>",
+            )
+
+        async def read(page, html):
+            await page.set_content(_page_html(html))
+            dialog = await page.evaluate_handle(PIN_VISIBLE_DIALOG_JS)
+            pinned = await page.evaluate_handle(
+                PIN_EDITOR_JS, arg={"scope": dialog.as_element()}
+            )
+            editor = (await pinned.get_property("editor")).as_element()
+            await editor.click()
+            await page.keyboard.type("Worth a read")
+            await page.evaluate(
+                OWN_EDITOR_JS, {"editor": editor, "text": "Worth a read"}
+            )
+            await page.evaluate(
+                "() => document.querySelectorAll('[data-submit-slot] button')"
+                ".forEach(button => { button.disabled = false; })"
+            )
+            outcome = await page.evaluate(
+                SUBMIT_EDITOR_JS,
+                {"scope": dialog.as_element(), "text": "Worth a read"},
+            )
+            return (outcome, await _clicked(page))
+
+        await _in_every_locale(dom_page, build, ("ambiguous_submit", None), read)
+
     async def test_submitting_text_the_editor_does_not_hold_refuses(
         self, dom_page
     ) -> None:

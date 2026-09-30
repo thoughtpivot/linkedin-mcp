@@ -730,6 +730,22 @@ PIN_EDITOR_JS = (
   const scopeButtons = scope instanceof Element
     ? Array.from(scope.querySelectorAll('button')).filter(visible)
     : [];
+  // An already-enabled non-SVG button is a standing control (close, and on a
+  // comment box the photo button). The repost submit is the one that is not
+  // enabled yet. Marking it here is what lets a later enable be told from a
+  // control that was clickable before any text existed.
+  for (const button of scopeButtons) {
+    if (
+      !button.disabled &&
+      (button.getAttribute('aria-disabled') || '').toLowerCase() !== 'true' &&
+      button.type === 'button' &&
+      !button.hasAttribute('aria-expanded') &&
+      !button.hasAttribute('aria-pressed') &&
+      !button.querySelector('svg')
+    ) {
+      button.__linkedinMcpWasEnabledBare = true;
+    }
+  }
   let controls = editor.parentElement;
   while (controls && scope.contains(controls)) {
     const buttons = Array.from(controls.querySelectorAll('button')).filter(visible);
@@ -786,10 +802,12 @@ CLEAR_EDITOR_JS = r"""
 # composer instead starts with three labelled SVG controls, then appends one
 # unlabeled, non-SVG `type="button"` after real key events. That exact 3-to-4
 # transition identifies the new submit control without reading a label. The
-# pinned repost dialog has one enabled unlabeled, non-SVG `type="button"`; its
-# other controls are labelled or expanding. Neither rule is relaxed to "the
-# only enabled button": the untouched photo control is labelled, contains an
-# SVG, and exists in the recorded baseline.
+# pinned repost dialog's submit control is the one non-SVG `type="button"` that
+# was not already enabled before typing: LinkedIn renders it with the dialog
+# and only enables it once the editor holds text, so "absent from the baseline"
+# never sees it. A control that was already enabled is not it. Neither rule is
+# relaxed to "the only enabled button": the untouched photo control is
+# labelled, contains an SVG, and exists in the recorded baseline.
 #
 # The submit control is also absent until the editor holds text LinkedIn
 # believes a human entered, which is why `_type_text` uses real key events.
@@ -840,12 +858,11 @@ SUBMIT_EDITOR_JS = (
       visible(button) &&
       !button.disabled &&
       (button.getAttribute('aria-disabled') || '').toLowerCase() !== 'true' &&
-      !button.hasAttribute('aria-label') &&
       !button.hasAttribute('aria-expanded') &&
       !button.hasAttribute('aria-pressed') &&
       !button.querySelector('svg') &&
       baseline &&
-      !baseline.scopeElements.includes(button)
+      !button.__linkedinMcpWasEnabledBare
     );
     if (dialogCandidates.length > 1) return 'ambiguous_submit';
     if (dialogCandidates.length === 1) {
@@ -891,6 +908,36 @@ SUBMIT_EDITOR_JS = (
     controls = controls.parentElement;
   }
   return 'no_submit_control';
+})
+"""
+)
+
+# Structural shape of a repost dialog when no submit control matched. Counts
+# only: a label's text is locale-dependent and is not what failed.
+DESCRIBE_DIALOG_BUTTONS_JS = (
+    r"""
+((arg) => {
+"""
+    + _VISIBLE_FN_JS
+    + r"""
+  const scope = arg.scope;
+  if (!(scope instanceof Element)) return null;
+  const buttons = Array.from(scope.querySelectorAll('button')).filter(visible);
+  const enabled = button =>
+    !button.disabled &&
+    (button.getAttribute('aria-disabled') || '').toLowerCase() !== 'true';
+  return {
+    buttons: buttons.length,
+    enabled: buttons.filter(enabled).length,
+    typeButton: buttons.filter(button => button.type === 'button').length,
+    typeSubmit: buttons.filter(button => button.type === 'submit').length,
+    labelled: buttons.filter(button => button.hasAttribute('aria-label')).length,
+    svg: buttons.filter(button => button.querySelector('svg')).length,
+    disabledAttr: buttons.filter(button => button.disabled).length,
+    roleButtons: Array.from(
+      scope.querySelectorAll('[role="button"]')
+    ).filter(visible).length,
+  };
 })
 """
 )
@@ -1538,6 +1585,23 @@ class PostActions:
                 # leaving it.
                 if submitted in ("no_submit_control", "ambiguous_submit"):
                     await page.evaluate(CLEAR_EDITOR_JS, {"editor": editor})
+                detail = ""
+                if submitted == "no_submit_control" and not scoped_to_root:
+                    shape = await page.evaluate(
+                        DESCRIBE_DIALOG_BUTTONS_JS, {"scope": scope}
+                    )
+                    if isinstance(shape, dict):
+                        detail = (
+                            " Dialog buttons:"
+                            f" {shape.get('buttons')} visible,"
+                            f" {shape.get('enabled')} enabled,"
+                            f" {shape.get('typeButton')} type=button,"
+                            f" {shape.get('typeSubmit')} type=submit,"
+                            f" {shape.get('labelled')} labelled,"
+                            f" {shape.get('svg')} with an svg,"
+                            f" {shape.get('disabledAttr')} disabled,"
+                            f" {shape.get('roleButtons')} role=button."
+                        )
                 if not scoped_to_root:
                     await self._dismiss_overlay()
                 return post_action_result(
@@ -1549,9 +1613,11 @@ class PostActions:
                         "not_owned": f"The {noun} editor no longer held this text.",
                         "ambiguous_submit": "Found more than one enabled submit "
                         f"control for the {noun}, so none was clicked.",
-                        "no_submit_control": f"The {noun} text was typed but no submit "
-                        "control ever appeared, so nothing was clicked and the text "
-                        "was removed from the editor.",
+                        "no_submit_control": (
+                            f"The {noun} text was typed but no submit "
+                            "control ever appeared, so nothing was clicked and the "
+                            f"text was removed from the editor.{detail}"
+                        ),
                     }.get(str(submitted), f"Could not submit the {noun}."),
                     retry_safe=True,
                 )
