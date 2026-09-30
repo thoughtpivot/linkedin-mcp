@@ -39,11 +39,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
  typing alone and confirms a comment that was never sent. Nor is a click this
  server chose to make. A submit control is either `type="submit"`, the sole
  control in the exact SDUI three-to-four transition recorded around real key
-  events, or the one unlabeled non-SVG button in the pinned repost dialog;
-  never fall back to an enabled button by elimination,
-  because an untouched comment
+  events, or the one unlabeled non-SVG button in the pinned repost dialog
+  whose parent holds no text of its own; never fall back to an enabled button
+  by elimination, because an untouched comment
  box offers a photo button as that candidate. Both mistakes shipped together
- and reported two comments published on posts that had none.
+ and reported two comments published on posts that had none. The reshared
+ preview's "… more" expander is the same shape as the repost submit down to
+ its text length; only its place inside the paragraph tells them apart, and
+ clicking it leaves the composer open with nothing published.
 - **Detection must be locale-independent.** Classification logic — connection state, action availability, button identity — must rely on URL patterns (`/preload/custom-invite/?vanityName=USER`, `/in/USER/edit/intro/`, `/messaging/compose/`), attribute *presence* (`aria-label` exists, `aria-expanded` exists, `aria-disabled` exists), or structural counts — never on text values like "Connect", "Follow", "Message", "1st", "Pending". The verb in an `aria-label` is locale-dependent; whether the attribute exists is not. Where text is genuinely the only signal, guard it behind an explicit per-locale table and document the limitation in code.
 
 ## Browser Identity Rules
@@ -186,7 +189,12 @@ by `post_action_result` in `scraping/contracts.py`.
  present there before. It never claims LinkedIn kept the action or showed it to
  anybody. The one way this field has actually been wrong was a reading that
  could not fail: see the [evidence
- rule](docs/decisions/2026-09-18-evidence-of-a-write.md).
+ rule](docs/decisions/2026-09-18-evidence-of-a-write.md). For a commentary
+ repost, LinkedIn closing the composer after the submit click also counts
+ (`repost_submitted`): the account's activity page, where the commentary is
+ confirmed, renders a new repost minutes late, and treating that empty read
+ as a failure published a duplicate. See
+ [the repost record](docs/decisions/2026-09-30-repost-submit-not-in-prose.md).
 - **`retry_safe` is the only field a retry may be keyed on, and it is false from
   the moment a click that could land is dispatched** — not from the moment one
   is confirmed. Two of the three actions are public content published under the

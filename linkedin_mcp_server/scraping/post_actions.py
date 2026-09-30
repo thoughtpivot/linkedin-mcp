@@ -107,6 +107,14 @@ _CONFIRM_POLL = 0.25
 _TYPE_DELAY = 12
 _SUBMIT_TIMEOUT = 4000
 
+# Where a commentary repost is confirmed, and how the activity page is polled.
+# The commentary publishes to the actor's own feed and nowhere else, so this is
+# the one page on which LinkedIn renders it back. Each attempt is a page load,
+# so the poll is a small number of attempts rather than a tight loop.
+_ACTIVITY_URL = "https://www.linkedin.com/in/me/recent-activity/all/"
+_ACTIVITY_ATTEMPTS = 3
+_ACTIVITY_POLL = 3.0
+
 _EDITOR_SELECTOR = '[role="textbox"][contenteditable="true"]'
 _DIALOG_SELECTOR = 'dialog[open], [role="dialog"]'
 _DIALOG_EDITOR_SELECTOR = (
@@ -787,13 +795,24 @@ CLEAR_EDITOR_JS = r"""
 # unlabeled, non-SVG `type="button"` after real key events. That exact 3-to-4
 # transition identifies the new submit control without reading a label. The
 # pinned repost dialog's submit control is its one enabled unlabeled non-SVG
-# `type="button"`. Measured on a commentary composer: three buttons, all
-# enabled before typing, two labelled and carrying an SVG, and the remaining
-# one neither. Requiring the button to be absent or disabled before typing
-# misses it, because the reshare is already attached and the control is live.
-# Two such buttons refuses. Neither rule is relaxed to "the only enabled
-# button": the untouched photo control is labelled, contains an SVG, and
-# exists in the recorded baseline.
+# `type="button"` that is not set inline in prose. Measured on a commentary
+# composer: the dialog holds two such buttons, and only one of them is a
+# form control. The other is the reshared post's own text expander, an
+# unlabeled non-SVG `type="button"` whose parent element carries over a
+# thousand characters of its own text nodes, because it sits at the end of
+# the truncated paragraph. The submit control's parent holds only controls.
+# A click on the expander opens the preview and leaves the composer standing,
+# which is exactly what one live attempt reported. Requiring the submit to be
+# absent or disabled before typing misses it, because the reshare is already
+# attached and the control is live. Two candidates refuses. Neither rule is
+# relaxed to "the only enabled button": the untouched photo control is
+# labelled, contains an SVG, and exists in the recorded baseline.
+#
+# The dialog's control is not clicked here. It is handed back as `chosen`
+# and clicked by the caller with a real pointer event, the way the editor
+# itself is focused: the composer is drawn by handlers that see the event,
+# and a scripted `click()` is the one kind of click this server cannot
+# distinguish from one LinkedIn ignored.
 #
 # The submit control is also absent until the editor holds text LinkedIn
 # believes a human entered, which is why `_type_text` uses real key events.
@@ -813,6 +832,37 @@ SUBMIT_EDITOR_JS = (
   if (editors.length !== 1) return 'ambiguous_editor';
   const editor = editors[0];
   if (editor.__linkedinMcpOwnedText !== arg.text) return 'not_owned';
+  // What was clicked, kept on the editor for the failure report. Structure
+  // only: no label value is read, so this is a description and not a rule.
+  const describe = button => {
+    editor.__linkedinMcpClicked = {
+      type: button.type,
+      labelled: button.hasAttribute('aria-label'),
+      svg: !!button.querySelector('svg'),
+      expanded: button.hasAttribute('aria-expanded'),
+      textLength: (button.innerText || '').trim().length,
+    };
+  };
+  const press = button => {
+    describe(button);
+    button.click();
+    return 'submitted';
+  };
+  const choose = button => {
+    describe(button);
+    editor.__linkedinMcpSubmit = button;
+    return 'chosen';
+  };
+  // A button whose parent has text of its own is part of that text, not a
+  // form action: the reshared preview's expander sits at the end of the
+  // paragraph it expands.
+  const inProse = button => {
+    const parent = button.parentElement;
+    if (!parent) return false;
+    return Array.from(parent.childNodes).some(
+      node => node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== ''
+    );
+  };
   let owner = editor.parentElement;
   while (owner && !owner.matches('form, dialog, [role="dialog"]')) {
     owner = owner.parentElement;
@@ -829,10 +879,7 @@ SUBMIT_EDITOR_JS = (
   );
   const candidates = buttons.filter(button => button.type === 'submit');
   if (candidates.length > 1) return 'ambiguous_submit';
-  if (candidates.length === 1) {
-    candidates[0].click();
-    return 'submitted';
-  }
+  if (candidates.length === 1) return press(candidates[0]);
   if (
     scope instanceof Element &&
     scope.matches('dialog[open], [role="dialog"]')
@@ -848,13 +895,11 @@ SUBMIT_EDITOR_JS = (
       !button.hasAttribute('aria-expanded') &&
       !button.hasAttribute('aria-pressed') &&
       !button.querySelector('svg') &&
+      !inProse(button) &&
       baseline
     );
     if (dialogCandidates.length > 1) return 'ambiguous_submit';
-    if (dialogCandidates.length === 1) {
-      dialogCandidates[0].click();
-      return 'submitted';
-    }
+    if (dialogCandidates.length === 1) return choose(dialogCandidates[0]);
   }
   const baseline = editor.__linkedinMcpInitialControls;
   let controls = editor.parentElement;
@@ -886,8 +931,7 @@ SUBMIT_EDITOR_JS = (
         expanders.length === 2 &&
         generated.length === 1
       ) {
-        generated[0].click();
-        return 'submitted';
+        return press(generated[0]);
       }
       break;
     }
@@ -897,6 +941,35 @@ SUBMIT_EDITOR_JS = (
 })
 """
 )
+
+# The descriptor `SUBMIT_EDITOR_JS` left on the editor for the control it
+# clicked, or null when nothing was clicked.
+READ_CLICKED_CONTROL_JS = r"""
+((arg) => (arg.editor && arg.editor.__linkedinMcpClicked) || null)
+"""
+
+# The dialog control `SUBMIT_EDITOR_JS` chose, as a handle for a real click.
+READ_SUBMIT_CONTROL_JS = r"""
+((arg) => (arg.editor && arg.editor.__linkedinMcpSubmit) || null)
+"""
+
+# Whether the pinned composer dialog is still open. Asked of the handle that
+# was typed into, never of a selector: the page holds other dialogs (the
+# messaging panel is one), so a selector-wide "hidden" wait can time out on a
+# dialog that was never the composer.
+DIALOG_OPEN_JS = r"""
+((dialog) => {
+  if (!dialog || !dialog.isConnected) return false;
+  if (dialog.tagName === 'DIALOG' && !dialog.open) return false;
+  const rect = dialog.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+})
+"""
+
+# The page's <main>, as a handle, so a text count can be scoped to it.
+PIN_MAIN_JS = r"""
+(() => document.querySelector('main'))
+"""
 
 # Structural shape of a repost dialog when no submit control matched. Counts
 # only: a label's text is locale-dependent and is not what failed.
@@ -1363,6 +1436,24 @@ class PostActions:
         commentary: str | None = None,
     ) -> dict[str, Any]:
         """Repost a post, with or without commentary, gated on confirmation."""
+        activity_baseline: int | None = None
+        if confirm_repost and commentary is not None:
+            # Read before the post is opened, so the count the confirmation
+            # compares against was taken while nothing could yet have been
+            # published. An unreadable activity page refuses here, before any
+            # menu is opened: a write that cannot be confirmed is one this
+            # server would have to report as unknown.
+            permalink = normalize_post_reference(post)
+            activity_baseline = await self._count_on_activity(commentary)
+            if activity_baseline < 0:
+                return post_action_result(
+                    permalink,
+                    "activity_unavailable",
+                    "Could not read this account's own activity page, which is "
+                    "where a repost with commentary is confirmed, so nothing "
+                    "was opened.",
+                )
+
         opened = await self._open_post(post)
         if isinstance(opened, dict):
             return opened
@@ -1445,11 +1536,30 @@ class PostActions:
                 success_status="reposted",
                 unconfirmed_status="repost_unconfirmed",
                 noun="repost",
-                post_id=post_id,
-                repost_baseline=baseline,
+                activity_baseline=activity_baseline,
             )
         finally:
             await root.dispose()
+
+    async def _count_on_activity(self, text: str) -> int:
+        """How many times ``text`` is rendered on this account's activity page.
+
+        ``-1`` when the page did not render a ``<main>``, which is the one
+        answer that means "could not read" rather than "not there".
+        """
+        await self._navigator._navigate_to_page(_ACTIVITY_URL)
+        handle = await self._session.page.evaluate_handle(PIN_MAIN_JS)
+        main = handle.as_element()
+        if main is None:
+            await handle.dispose()
+            return -1
+        try:
+            counted = await self._session.page.evaluate(
+                COUNT_TEXT_UNITS_JS, {"root": main, "text": text.strip()}
+            )
+            return int(counted) if isinstance(counted, int) and counted >= 0 else -1
+        finally:
+            await main.dispose()
 
     async def _wait_for_repost_menu(self) -> tuple[int, str | None]:
         """The item count and structural layout of the open repost menu."""
@@ -1479,18 +1589,19 @@ class PostActions:
         success_status: str,
         unconfirmed_status: str,
         noun: str,
-        post_id: str | None = None,
-        repost_baseline: list[str] | None = None,
+        activity_baseline: int | None = None,
     ) -> dict[str, Any]:
         """Type text into the one available editor and submit it.
 
         ``scoped_to_root`` is the difference between a comment, whose editor
         lives inside the post, and repost commentary, whose editor lives in a
-        portal-mounted dialog outside it. Commentary is confirmed the same way
-        a bare repost is: the source post's own count strings change.
-        Matching text inside that post is not evidence — the commentary
-        publishes to the actor's feed, and the permalink page still has a
-        comment box that would satisfy a text count without a reshare.
+        portal-mounted dialog outside it. Commentary is confirmed on the
+        actor's own activity page, against ``activity_baseline``, because that
+        is the one place LinkedIn renders it. Matching text inside the source
+        post is not evidence — the permalink page still has a comment box that
+        would satisfy a text count without a reshare — and the source post's
+        count strings are not read for it either: the composer moves the page
+        to ``/sharing/compose``, so the post is not reliably there to read.
         """
         page = self._session.page
         dialog: Any = None
@@ -1559,20 +1670,20 @@ class PostActions:
                     }.get(typed, f"Could not write the {noun}."),
                 )
 
-            if scoped_to_root:
-                submitted = await self._submit_editor(scope, text)
-            else:
-                baseline_counts = repost_baseline or []
-                submitted = await self._submit_editor(scope, text)
+            submitted = await self._submit_editor(scope, text, editor)
             if submitted != "submitted":
-                # Nothing was clicked on either of these two, so the typed text is
+                # Nothing was clicked on any of these three, so the typed text is
                 # this server's to take back, and taking it back is what keeps the
                 # `retry_safe` below true: a draft left behind would meet the next
                 # attempt as `draft_present` and refuse it. The other statuses
                 # describe an editor that is no longer identifiable as the one that
                 # was typed into, and clearing something unidentified is worse than
                 # leaving it.
-                if submitted in ("no_submit_control", "ambiguous_submit"):
+                if submitted in (
+                    "no_submit_control",
+                    "ambiguous_submit",
+                    "submit_unreachable",
+                ):
                     await page.evaluate(CLEAR_EDITOR_JS, {"editor": editor})
                 detail = ""
                 if submitted == "no_submit_control" and not scoped_to_root:
@@ -1603,6 +1714,9 @@ class PostActions:
                         "not_owned": f"The {noun} editor no longer held this text.",
                         "ambiguous_submit": "Found more than one enabled submit "
                         f"control for the {noun}, so none was clicked.",
+                        "submit_unreachable": f"The {noun} submit control was "
+                        "found but never became clickable, so nothing was "
+                        "clicked and the text was removed from the editor.",
                         "no_submit_control": (
                             f"The {noun} text was typed but no submit "
                             "control ever appeared, so nothing was clicked and the "
@@ -1622,10 +1736,119 @@ class PostActions:
                     unconfirmed_status=unconfirmed_status,
                     noun=noun,
                 )
-            return await self._confirm_repost(permalink, str(post_id), baseline_counts)
+            clicked = await page.evaluate(READ_CLICKED_CONTROL_JS, {"editor": editor})
+            return await self._confirm_commentary(
+                permalink,
+                text,
+                dialog=dialog,
+                baseline=activity_baseline if activity_baseline is not None else 0,
+                clicked=clicked if isinstance(clicked, dict) else None,
+            )
         finally:
             if dialog is not None:
                 await dialog.dispose()
+
+    async def _confirm_commentary(
+        self,
+        permalink: str,
+        text: str,
+        *,
+        dialog: Any,
+        baseline: int,
+        clicked: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Confirm commentary by finding it rendered on the actor's activity.
+
+        The composer closing is waited for first, because a closed composer is
+        what a submit that LinkedIn accepted looks like from this side; the
+        confirmation itself is the count on the activity page rising above
+        the baseline taken before anything was opened. ``dialog`` is the
+        handle that was typed into, and it is that handle which is asked
+        whether it is still open.
+        """
+        try:
+            return await self._poll_commentary(
+                permalink, text, dialog=dialog, baseline=baseline, clicked=clicked
+            )
+        except BaseException:
+            logger.warning(POST_ACTION_INTERRUPTED_WARNING)
+            raise
+
+    async def _composer_closed(self, dialog: Any) -> bool:
+        """Whether the pinned composer went away within ``_CONFIRM_TIMEOUT``."""
+        deadline = _CONFIRM_TIMEOUT / 1000
+        waited = 0.0
+        while True:
+            if not await self._session.page.evaluate(DIALOG_OPEN_JS, dialog):
+                return True
+            if waited >= deadline:
+                return False
+            await asyncio.sleep(_CONFIRM_POLL)
+            waited += _CONFIRM_POLL
+
+    async def _poll_commentary(
+        self,
+        permalink: str,
+        text: str,
+        *,
+        dialog: Any,
+        baseline: int,
+        clicked: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        detail = ""
+        if clicked:
+            detail = (
+                " Clicked control:"
+                f" type={clicked.get('type')},"
+                f" labelled={clicked.get('labelled')},"
+                f" svg={clicked.get('svg')},"
+                f" expanded={clicked.get('expanded')},"
+                f" text length {clicked.get('textLength')}."
+            )
+        if not await self._composer_closed(dialog):
+            return post_action_result(
+                permalink,
+                "repost_unconfirmed",
+                "The repost control was clicked but the composer stayed open, "
+                "so the repost may not have been submitted. Check your own "
+                f"activity before retrying, as a retry may repost twice.{detail}",
+                retry_safe=False,
+            )
+
+        for attempt in range(_ACTIVITY_ATTEMPTS):
+            if attempt:
+                await asyncio.sleep(_ACTIVITY_POLL)
+            count = await self._count_on_activity(text)
+            if count > baseline:
+                return post_action_result(
+                    permalink,
+                    "reposted",
+                    "The repost was published and the commentary is rendered on "
+                    "this account's activity.",
+                    acted=True,
+                    retry_safe=False,
+                )
+        # The composer closed on its own after the chosen control was clicked.
+        # This server sent no Escape and the dismiss control is excluded by
+        # its label, so the closing is LinkedIn's response to the submit. It
+        # is reported as acted because it was, twice, measured to be exactly
+        # that: both composers that closed this way had published, and the
+        # activity page rendered each repost only minutes later. Reading this
+        # as "not confirmed, check and retry" is what published the second
+        # copy — the check came back empty because of the lag, not because
+        # nothing was there.
+        return post_action_result(
+            permalink,
+            "repost_submitted",
+            "The repost control was clicked and LinkedIn closed the composer, "
+            "which is how an accepted repost looks from this side. The "
+            "commentary is not yet rendered on this account's activity page, "
+            "which has been measured to lag by several minutes. Do not retry: "
+            "a retry made on an empty activity read published the repost "
+            f"twice.{detail}",
+            acted=True,
+            retry_safe=False,
+        )
 
     async def _type_text(self, editor: ElementHandle, text: str) -> str:
         """Type into a pinned editor with real key events.
@@ -1660,7 +1883,7 @@ class PostActions:
         await page.evaluate(OWN_EDITOR_JS, {"editor": editor, "text": text})
         return "typed"
 
-    async def _submit_editor(self, scope: Any, text: str) -> str:
+    async def _submit_editor(self, scope: Any, text: str, editor: ElementHandle) -> str:
         """Click the editor's submit control once it exists.
 
         The control is absent until LinkedIn has processed the typed text, so a
@@ -1668,6 +1891,12 @@ class PostActions:
         about to become submittable. Only that one status is retried: an
         ambiguous editor or a lost ownership marker will not improve by waiting,
         and re-reading them would hide a page that changed underneath.
+
+        A control the program hands back as ``chosen`` is clicked from here
+        with a real pointer event. Playwright dispatches that click only after
+        its actionability checks pass, so a timeout raised by it means no
+        event was sent, which is what lets ``submit_unreachable`` stay
+        retry-safe.
         """
         deadline = _SUBMIT_TIMEOUT / 1000
         waited = 0.0
@@ -1678,11 +1907,30 @@ class PostActions:
                     SUBMIT_EDITOR_JS, {"scope": scope, "text": text}
                 )
             )
+            if result == "chosen":
+                return await self._click_chosen_control(editor)
             if result != "no_submit_control":
                 return result
             await asyncio.sleep(_CONFIRM_POLL)
             waited += _CONFIRM_POLL
         return result
+
+    async def _click_chosen_control(self, editor: ElementHandle) -> str:
+        """Click the control ``SUBMIT_EDITOR_JS`` left on the editor."""
+        handle = await self._session.page.evaluate_handle(
+            READ_SUBMIT_CONTROL_JS, arg={"editor": editor}
+        )
+        control = handle.as_element()
+        if control is None:
+            await handle.dispose()
+            return "no_submit_control"
+        try:
+            await control.click(timeout=_SUBMIT_TIMEOUT)
+        except PlaywrightTimeoutError:
+            return "submit_unreachable"
+        finally:
+            await control.dispose()
+        return "submitted"
 
     async def _confirm_text(
         self,

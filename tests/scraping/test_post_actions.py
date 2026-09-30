@@ -49,6 +49,8 @@ PROGRAMS = {
     "clear": post_actions.CLEAR_EDITOR_JS,
     "submit": post_actions.SUBMIT_EDITOR_JS,
     "units": post_actions.COUNT_TEXT_UNITS_JS,
+    "clicked": post_actions.READ_CLICKED_CONTROL_JS,
+    "dialog_open": post_actions.DIALOG_OPEN_JS,
 }
 
 
@@ -155,6 +157,27 @@ class FakeProperty:
         return self._element
 
 
+class FakeSubmitControl:
+    """The dialog control the submit program chose, awaiting a real click."""
+
+    def __init__(self, *, present: bool = True, unreachable: bool = False):
+        self._present = present
+        self._unreachable = unreachable
+        self.clicks = 0
+        self.disposed = False
+
+    def as_element(self) -> Any:
+        return self if self._present else None
+
+    async def click(self, *, timeout: int | None = None) -> None:
+        if self._unreachable:
+            raise post_actions.PlaywrightTimeoutError("covered")
+        self.clicks += 1
+
+    async def dispose(self) -> None:
+        self.disposed = True
+
+
 class FakePinnedEditor:
     """The ``{status, editor}`` handle the editor pin program returns."""
 
@@ -190,10 +213,20 @@ class FakePage:
         editor: FakeEditor | None = None,
         editor_status: str = "pinned",
         dialog_pinned: bool = True,
+        main_pinned: bool = True,
+        submit_control: FakeSubmitControl | None = None,
         **answers: Any,
     ):
         self.url = POST_URL
         self.calls: list[str] = []
+        # A text count that was not scripted reads as "not there" rather than
+        # as an unreadable page, which is what a real empty activity page says.
+        answers.setdefault("units", 0)
+        # An unscripted composer is one that closed on the click.
+        answers.setdefault("dialog_open", False)
+        self.submit_control = (
+            submit_control if submit_control is not None else FakeSubmitControl()
+        )
         self._answers = {name: answers.get(name) for name in PROGRAMS}
         self._sequences = {
             name: list(value) if isinstance(value, list) else None
@@ -204,6 +237,7 @@ class FakePage:
         self.editor = editor if editor is not None else FakeEditor()
         self._editor_status = editor_status
         self._dialog_pinned = dialog_pinned
+        self._main_pinned = main_pinned
         self.pin_editor_scope: Any = None
         self.keyboard = MagicMock()
         self.keyboard.press = AsyncMock(side_effect=self._press)
@@ -257,6 +291,13 @@ class FakePage:
                 status, self.editor if status == "pinned" else None
             )
             return self.pinned_editor
+        if script is post_actions.PIN_MAIN_JS:
+            self.calls.append("pin_main")
+            return FakeHandle(pinned=self._main_pinned)
+        if script is post_actions.READ_SUBMIT_CONTROL_JS:
+            self.calls.append("read_submit")
+            assert arg is not None and arg.get("editor") is self.editor
+            return self.submit_control
         assert script is post_actions.PIN_POST_ROOT_JS
         assert arg == POST_ID
         self.calls.append("pin")
@@ -284,6 +325,7 @@ def fast_waits(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(post_actions, "_FLYOUT_TIMEOUT", 30)
     monkeypatch.setattr(post_actions, "_EDITOR_TIMEOUT", 30)
     monkeypatch.setattr(post_actions, "_CONFIRM_POLL", 0.001)
+    monkeypatch.setattr(post_actions, "_ACTIVITY_POLL", 0.001)
 
 
 def actions(page: FakePage) -> PostActions:
@@ -784,21 +826,20 @@ class TestRepost:
         assert result["acted"] is False
         assert "pick_repost" not in page.calls
 
-    async def test_commentary_pins_the_dialog_and_confirms_on_count_change(
+    async def test_commentary_pins_the_dialog_and_confirms_on_own_activity(
         self,
     ) -> None:
+        # The first `units` read is the activity baseline, taken before the
+        # post is opened; the second is the read after the composer closed.
         page = FakePage(
-            signals=[
-                signals(counts=["12", "3"]),
-                signals(counts=["12", "3"]),
-                signals(counts=["12", "4"]),
-            ],
+            signals=signals(counts=["12", "3"]),
             open_repost="clicked",
             repost_menu={"menus": 1, "items": 2, "layout": "popover"},
             pick_repost=True,
-            submit="submitted",
+            units=[0, 1],
+            submit="chosen",
         )
-        with navigated():
+        with navigated() as navigate:
             result = await actions(page).repost_post(
                 PERMALINK, confirm_repost=True, commentary="Worth a read"
             )
@@ -809,12 +850,45 @@ class TestRepost:
         assert page.picked_repost["index"] == 0
         assert page.picked_repost["layout"] == "popover"
         assert page.pin_editor_scope is page.dialog_handle
-        assert "units" not in page.calls
         assert "pin_dialog" in page.calls
+        # The chosen control is clicked exactly once, as a pointer event on the
+        # handle, and the composer is asked about only after that click.
+        assert page.submit_control.clicks == 1
+        assert page.calls.index("read_submit") < page.calls.index("dialog_open")
+        # Baseline, then the post, then the confirmation read.
+        assert [call.args[0] for call in navigate.await_args_list] == [
+            post_actions._ACTIVITY_URL,
+            POST_URL,
+            post_actions._ACTIVITY_URL,
+        ]
+        assert page.calls.index("pin_main") < page.calls.index("open_repost")
 
     async def test_commentary_url_change_still_pins_the_composer_dialog(
         self,
     ) -> None:
+        page = FakePage(
+            signals=signals(counts=["12", "3"]),
+            open_repost="clicked",
+            repost_menu={"menus": 1, "items": 2, "layout": "popover"},
+            pick_repost=True,
+            units=[0, 1],
+            submit="chosen",
+        )
+        page.url = "https://www.linkedin.com/sharing/compose"
+        with navigated():
+            result = await actions(page).repost_post(
+                PERMALINK, confirm_repost=True, commentary="Worth a read"
+            )
+        assert result["status"] == "reposted"
+        assert result["acted"] is True
+        assert page.pin_editor_scope is page.dialog_handle
+        assert "pin_dialog" in page.calls
+
+    async def test_commentary_is_not_confirmed_by_the_source_post(self) -> None:
+        # The source post's counts change and text inside it would match, but
+        # neither is where commentary publishes. Only the activity page
+        # confirms, and here it never rises above the baseline, so the result
+        # is the submitted-but-not-rendered reading, not `reposted`.
         page = FakePage(
             signals=[
                 signals(counts=["12", "3"]),
@@ -824,29 +898,67 @@ class TestRepost:
             open_repost="clicked",
             repost_menu={"menus": 1, "items": 2, "layout": "popover"},
             pick_repost=True,
-            submit="submitted",
+            units=1,
+            submit="chosen",
         )
-        page.url = "https://www.linkedin.com/sharing/compose"
-        with navigated() as navigate:
+        with navigated():
             result = await actions(page).repost_post(
                 PERMALINK, confirm_repost=True, commentary="Worth a read"
             )
-        assert result["status"] == "reposted"
-        assert result["acted"] is True
-        assert page.pin_editor_scope is page.dialog_handle
-        assert "pin_dialog" in page.calls
-        assert navigate.await_count == 1
+        assert result["status"] == "repost_submitted"
+        assert result["retry_safe"] is False
+        assert page.calls.count("units") == 1 + post_actions._ACTIVITY_ATTEMPTS
 
-    async def test_commentary_does_not_treat_text_in_the_source_post_as_proof(
+    async def test_a_composer_linkedin_closed_is_acted_even_before_it_renders(
+        self,
+    ) -> None:
+        # Measured twice: a composer that closed after the submit click had
+        # published each time, and the activity page showed it minutes later.
+        # The empty activity read is therefore not a failure and must not
+        # invite a retry, which is what published a duplicate.
+        page = FakePage(
+            signals=signals(),
+            open_repost="clicked",
+            repost_menu={"menus": 1, "items": 2, "layout": "popover"},
+            pick_repost=True,
+            units=0,
+            submit="chosen",
+        )
+        with navigated():
+            result = await actions(page).repost_post(
+                PERMALINK, confirm_repost=True, commentary="Worth a read"
+            )
+        assert result["status"] == "repost_submitted"
+        assert result["acted"] is True
+        assert result["retry_safe"] is False
+        # Distinct from the composer that stayed open, which is not acted.
+        still_open = FakePage(
+            signals=signals(),
+            open_repost="clicked",
+            repost_menu={"menus": 1, "items": 2, "layout": "popover"},
+            pick_repost=True,
+            units=0,
+            submit="chosen",
+            dialog_open=True,
+        )
+        with navigated():
+            other = await actions(still_open).repost_post(
+                PERMALINK, confirm_repost=True, commentary="Worth a read"
+            )
+        assert other["status"] == "repost_unconfirmed"
+        assert other["acted"] is False
+
+    async def test_commentary_with_the_composer_still_open_is_unconfirmed(
         self,
     ) -> None:
         page = FakePage(
-            signals=signals(counts=["12", "3"]),
+            signals=signals(),
             open_repost="clicked",
             repost_menu={"menus": 1, "items": 2, "layout": "popover"},
             pick_repost=True,
             units=[0, 1],
-            submit="submitted",
+            submit="chosen",
+            dialog_open=True,
         )
         with navigated():
             result = await actions(page).repost_post(
@@ -855,7 +967,114 @@ class TestRepost:
         assert result["status"] == "repost_unconfirmed"
         assert result["acted"] is False
         assert result["retry_safe"] is False
-        assert "units" not in page.calls
+        # The question is put to the pinned composer handle, not to a
+        # selector: the page holds other dialogs that never close.
+        assert page.calls.count("dialog_open") > 1
+        page.wait_for_selector.assert_not_called()
+        # No activity read after the click: the second `units` answer is
+        # never consumed, so a rendered match is not what confirmed nothing.
+        assert page.calls.count("units") == 1
+
+    async def test_a_composer_that_closes_late_is_still_confirmed(self) -> None:
+        page = FakePage(
+            signals=signals(),
+            open_repost="clicked",
+            repost_menu={"menus": 1, "items": 2, "layout": "popover"},
+            pick_repost=True,
+            units=[0, 1],
+            submit="chosen",
+            dialog_open=[True, True, False],
+        )
+        with navigated():
+            result = await actions(page).repost_post(
+                PERMALINK, confirm_repost=True, commentary="Worth a read"
+            )
+        assert result["status"] == "reposted"
+        assert result["acted"] is True
+        assert page.calls.count("dialog_open") == 3
+
+    async def test_an_unreachable_submit_control_clears_and_stays_retry_safe(
+        self,
+    ) -> None:
+        # Playwright raises its timeout before any pointer event is sent, so
+        # nothing could have landed: the text is taken back and a retry is safe.
+        page = FakePage(
+            signals=signals(),
+            open_repost="clicked",
+            repost_menu={"menus": 1, "items": 2, "layout": "popover"},
+            pick_repost=True,
+            units=[0, 1],
+            submit="chosen",
+            submit_control=FakeSubmitControl(unreachable=True),
+        )
+        with navigated():
+            result = await actions(page).repost_post(
+                PERMALINK, confirm_repost=True, commentary="Worth a read"
+            )
+        assert result["status"] == "submit_unavailable"
+        assert result["acted"] is False
+        assert result["retry_safe"] is True
+        assert "clear" in page.calls
+        assert "dialog_open" not in page.calls
+        assert page.calls.count("units") == 1
+
+    async def test_a_chosen_control_that_vanished_is_no_submit_control(
+        self,
+    ) -> None:
+        page = FakePage(
+            signals=signals(),
+            open_repost="clicked",
+            repost_menu={"menus": 1, "items": 2, "layout": "popover"},
+            pick_repost=True,
+            units=[0, 1],
+            submit="chosen",
+            submit_control=FakeSubmitControl(present=False),
+        )
+        with navigated():
+            result = await actions(page).repost_post(
+                PERMALINK, confirm_repost=True, commentary="Worth a read"
+            )
+        assert result["status"] == "submit_unavailable"
+        assert result["retry_safe"] is True
+        assert page.submit_control.clicks == 0
+        assert "clear" in page.calls
+
+    async def test_an_unreadable_activity_page_refuses_before_any_menu(
+        self,
+    ) -> None:
+        page = FakePage(
+            signals=signals(),
+            open_repost="clicked",
+            repost_menu={"menus": 1, "items": 2, "layout": "popover"},
+            pick_repost=True,
+            main_pinned=False,
+        )
+        with navigated():
+            result = await actions(page).repost_post(
+                PERMALINK, confirm_repost=True, commentary="Worth a read"
+            )
+        assert result["status"] == "activity_unavailable"
+        assert result["acted"] is False
+        assert result["retry_safe"] is True
+        assert "open_repost" not in page.calls
+        assert "type" not in page.calls
+
+    async def test_a_bare_repost_reads_no_activity_page(self) -> None:
+        page = FakePage(
+            signals=[
+                signals(counts=["12", "3"]),
+                signals(counts=["12", "3"]),
+                signals(counts=["12", "4"]),
+            ],
+            open_repost="clicked",
+            repost_menu={"menus": 1, "items": 2, "layout": "popover"},
+            pick_repost=True,
+        )
+        with navigated() as navigate:
+            result = await actions(page).repost_post(PERMALINK, confirm_repost=True)
+        assert result["status"] == "reposted"
+        assert "pin_main" not in page.calls
+        assert navigate.await_count == 1
 
     async def test_two_visible_dialogs_type_nothing(self) -> None:
         page = FakePage(

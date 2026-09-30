@@ -55,6 +55,7 @@ from linkedin_mcp_server.scraping.post_actions import (
     POST_ACTION_SIGNALS_JS,
     READ_REACTION_FLYOUT_JS,
     READ_REPOST_MENU_JS,
+    READ_SUBMIT_CONTROL_JS,
     SUBMIT_EDITOR_JS,
 )
 
@@ -1408,22 +1409,30 @@ class TestWritingText:
                 SUBMIT_EDITOR_JS,
                 {"scope": dialog.as_element(), "text": "Worth a read"},
             )
+            # The dialog rule chooses without clicking; the real click is the
+            # caller's. So the chosen control is read back and clicked here to
+            # show the choice was the one that submits.
+            chosen = await page.evaluate_handle(
+                READ_SUBMIT_CONTROL_JS, arg={"editor": editor}
+            )
+            await chosen.as_element().click()
             return (outcome, await _clicked(page))
 
         await _in_every_locale(
             dom_page,
             current_composer_dialog,
-            ("submitted", "current-repost-submit"),
+            ("chosen", "current-repost-submit"),
             read,
         )
 
-    async def test_repost_dialog_clicks_its_one_unlabelled_button(
+    async def test_repost_dialog_chooses_its_one_unlabelled_button(
         self, dom_page
     ) -> None:
         # Measured on a live commentary composer: the Post control is already
         # enabled when the dialog opens, because the reshared post is attached.
         # It is the one button with no label and no SVG. The others are labelled
         # and carry an SVG, which is what keeps a photo or close control out.
+        # The choice is handed back, not clicked: a real pointer click follows.
         def build(labels: Labels) -> str:
             return current_composer_dialog(labels).replace(
                 "<div data-submit-slot></div>",
@@ -1450,9 +1459,61 @@ class TestWritingText:
                 SUBMIT_EDITOR_JS,
                 {"scope": dialog.as_element(), "text": "Worth a read"},
             )
+            untouched = await _clicked(page)
+            chosen = await page.evaluate_handle(
+                READ_SUBMIT_CONTROL_JS, arg={"editor": editor}
+            )
+            await chosen.as_element().click()
+            return (outcome, untouched, await _clicked(page))
+
+        await _in_every_locale(dom_page, build, ("chosen", None, "repost-submit"), read)
+
+    async def test_a_button_inline_in_the_preview_prose_is_not_the_submit(
+        self, dom_page
+    ) -> None:
+        # Measured on a live commentary composer: the reshared post's text
+        # expander is also an unlabeled non-SVG type="button", set at the end
+        # of the paragraph it expands, so its parent holds text of its own.
+        # A click on it opens the preview and leaves the composer standing.
+        def build(labels: Labels) -> str:
+            return current_composer_dialog(labels).replace(
+                "<div data-submit-slot></div>",
+                '<div role="listitem"><p><span>A couple of months ago I said I '
+                "was building something new, a private network for the people "
+                "making buildings in factories.<br><span>The Floor</span>"
+                '<button type="button" onclick="document.body.setAttribute('
+                "'data-clicked','expander')\"><span>… more</span></button>"
+                "</span></p></div>"
+                "<div data-submit-slot>"
+                '<button type="button" '
+                'onclick="document.body.setAttribute('
+                "'data-clicked','repost-submit')\">"
+                "<span>submit</span></button></div>",
+            )
+
+        async def read(page, html):
+            await page.set_content(_page_html(html))
+            dialog = await page.evaluate_handle(PIN_VISIBLE_DIALOG_JS)
+            pinned = await page.evaluate_handle(
+                PIN_EDITOR_JS, arg={"scope": dialog.as_element()}
+            )
+            editor = (await pinned.get_property("editor")).as_element()
+            await editor.click()
+            await page.keyboard.type("Worth a read")
+            await page.evaluate(
+                OWN_EDITOR_JS, {"editor": editor, "text": "Worth a read"}
+            )
+            outcome = await page.evaluate(
+                SUBMIT_EDITOR_JS,
+                {"scope": dialog.as_element(), "text": "Worth a read"},
+            )
+            chosen = await page.evaluate_handle(
+                READ_SUBMIT_CONTROL_JS, arg={"editor": editor}
+            )
+            await chosen.as_element().click()
             return (outcome, await _clicked(page))
 
-        await _in_every_locale(dom_page, build, ("submitted", "repost-submit"), read)
+        await _in_every_locale(dom_page, build, ("chosen", "repost-submit"), read)
 
     async def test_two_unlabelled_dialog_buttons_click_neither(self, dom_page) -> None:
         def build(labels: Labels) -> str:

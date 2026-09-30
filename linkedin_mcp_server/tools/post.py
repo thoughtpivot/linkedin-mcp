@@ -361,8 +361,14 @@ def register_post_tools(
         Returns:
             Dict with url, status, message, acted and retry_safe. A bare repost
             is confirmed by the post's own controls no longer rendering the same
-            text, and a repost with commentary by that text appearing; neither
-            claims anybody saw it. ``retry_safe`` is false from the moment the
+            text, and a repost with commentary by that text appearing on this
+            account's own activity page (``reposted``); neither claims anybody
+            saw it. That activity page renders a new repost only minutes after
+            it is published, so a commentary repost whose composer LinkedIn
+            closed after the submit click, but whose text is not yet rendered
+            there, returns ``repost_submitted`` with ``acted`` true. Treat it
+            as published; an empty activity read taken right after it is not
+            evidence of anything. ``retry_safe`` is false from the moment the
             repost is dispatched, and retrying while it is false can repost
             twice.
         """

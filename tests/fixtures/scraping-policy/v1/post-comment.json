@@ -211,7 +211,7 @@
       "call": "comment_on_post",
       "kind": "evaluate",
       "operation": "post_text_submit",
-      "program_digest": "55fc04aa25ec",
+      "program_digest": "677e6ed87fbc",
       "section": "post"
     },
     {
