@@ -1,6 +1,9 @@
 services:
   linkedin-mcp:
-    image: stickerdaniel/linkedin-mcp-server:4.25.1
+    build: .
+    image: linkedin-mcp
+    ports:
+      - "127.0.0.1:8080:8080"
     volumes:
       - ~/.linkedin-mcp:/home/pwuser/.linkedin-mcp
     environment:
@@ -12,5 +15,12 @@ services:
       - PROXY_USERNAME
       - PROXY_PASSWORD
       - PROXY_BYPASS
-    stdin_open: true
-    tty: true
+    command:
+      - --transport
+      - streamable-http
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --path
+      - /mcp

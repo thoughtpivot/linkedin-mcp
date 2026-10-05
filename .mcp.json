@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "linkedin": {
+      "type": "http",
+      "url": "http://127.0.0.1:8000/mcp"
+    },
     "greptile": {
       "type": "http",
       "url": "https://api.greptile.com/mcp",

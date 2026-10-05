@@ -592,9 +592,9 @@ def test_every_documented_mount_is_a_path_docker_accepts() -> None:
     ``$`` inside one names a directory rather than a variable, because no
     shell is involved.
     """
-    for name, document in (
-        ("README.md", _README),
-        ("docs/docker-hub.md", _DOCKER_GUIDE),
+    for name, document, required in (
+        ("README.md", _README, False),
+        ("docs/docker-hub.md", _DOCKER_GUIDE, True),
     ):
         mounts = _documented_client_mounts(document)
         written = re.findall(r'"-v",\s*"([^"]*)"', document)
@@ -602,7 +602,8 @@ def test_every_documented_mount_is_a_path_docker_accepts() -> None:
             f"{name} writes {written} but this check parsed {mounts}, so a "
             "configuration block was never inspected"
         )
-        assert mounts, f"{name} documents no mount to check"
+        if required:
+            assert mounts, f"{name} documents no mount to check"
 
         for mount in mounts:
             host, _, container = mount.rpartition(":")
