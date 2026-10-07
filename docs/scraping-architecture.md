@@ -19,9 +19,9 @@ a page-owning collaborator.
 | `capture` | `CaptureMode`, `CapturePlan`, `OverlayRootNotFoundError`, `RATE_LIMIT_RETRY_DELAY`, `SectionCapture`, `capture_plan_for_url()` | `page-owning` |
 | `company` | `CompanyScraper` | `browser-free` |
 | `connection` | `ActionSignals`, `ConnectionState`, `detect_connection_state()` | `browser-free` |
-| `connection_actions` | `ACTION_SIGNALS_JS`, `CLICK_INCOMING_ACCEPT_JS`, `ConnectionActions`, `OPEN_MORE_BUTTON_JS`, `ReadMainProfile` | `page-owning` |
+| `connection_actions` | `ACTION_SIGNALS_JS`, `CLICK_INCOMING_ACCEPT_JS`, `CLICK_REMOVE_CONFIRM_JS`, `CLICK_REMOVE_MENU_JS`, `ConnectionActions`, `OPEN_MORE_BUTTON_JS`, `PROBE_REMOVE_MENU_JS`, `ReadMainProfile` | `page-owning` |
 | `content` | `PageContentReader` | `page-owning` |
-| `contracts` | `ExtractedSection`, `FilterValidationError`, `POST_ACTION_INTERRUPTED_WARNING`, `RATE_LIMITED_SECTION_TEXT`, `SEND_INTERRUPTED_WARNING`, `message_action_result()`, `post_action_result()`, `rate_limited_section_error()`, `refuse_an_invalid_message()`, `refuse_invalid_post_text()` | `browser-free` |
+| `contracts` | `ExtractedSection`, `FilterValidationError`, `POST_ACTION_INTERRUPTED_WARNING`, `RATE_LIMITED_SECTION_TEXT`, `REMOVE_CONNECTION_INTERRUPTED_WARNING`, `SEND_INTERRUPTED_WARNING`, `message_action_result()`, `post_action_result()`, `rate_limited_section_error()`, `refuse_an_invalid_message()`, `refuse_invalid_post_text()` | `browser-free` |
 | `conversations` | `ConversationReader`, `strip_select_conversation_prefix()` | `page-owning` |
 | `extractor` | `LinkedInExtractor` | `page-owning` |
 | `feed` | `FeedScraper` | `page-owning` |
@@ -40,7 +40,7 @@ a page-owning collaborator.
 | `profile_page` | `MessageTarget`, `MessageTargetResolution`, `ProfilePageReader`, `ReadMessageTarget` | `page-owning` |
 | `search_urls` | `CONTENT_DATE_POSTED_MAP`, `EXPERIENCE_LEVEL_MAP`, `JOB_DATE_POSTED_MAP`, `JOB_TYPE_MAP`, `NETWORK_TOKENS`, `SORT_BY_MAP`, `WORK_TYPE_MAP`, `build_company_search_url()`, `build_content_search_url()`, `build_job_search_url()`, `build_people_search_url()` | `browser-free` |
 | `session` | `NAV_DELAY`, `ScrapingSession` | `page-owning` |
-| `text` | `DETAIL_CAPTURE_EN_US`, `DetailCaptureTextTable`, `JOB_POSTING_EN_US`, `JOB_SEARCH_EN_US`, `JobPostingTextTable`, `JobSearchTextTable`, `SIDEBAR_CHROME_EN`, `SidebarChromeTable`, `filter_linkedin_noise_lines()`, `strip_conversation_chrome()`, `strip_linkedin_noise()`, `truncate_linkedin_noise()` | `browser-free` |
+| `text` | `DETAIL_CAPTURE_EN_US`, `DetailCaptureTextTable`, `JOB_POSTING_EN_US`, `JOB_SEARCH_EN_US`, `JobPostingTextTable`, `JobSearchTextTable`, `REMOVE_CONNECTION_EN`, `RemoveConnectionTextTable`, `SIDEBAR_CHROME_EN`, `SidebarChromeTable`, `filter_linkedin_noise_lines()`, `strip_conversation_chrome()`, `strip_linkedin_noise()`, `truncate_linkedin_noise()` | `browser-free` |
 
 ## Internal import graph
 
@@ -48,7 +48,7 @@ a page-owning collaborator.
 - `capture` -> `content`, `contracts`, `feed_payload`, `link_metadata`, `navigation`, `session`, `text`
 - `company` -> `capture`, `contracts`, `fields`, `identifiers`, `link_metadata`, `search_urls`, `session`
 - `connection` -> _(none)_
-- `connection_actions` -> `connection`, `identifiers`, `navigation`, `session`
+- `connection_actions` -> `connection`, `contracts`, `identifiers`, `navigation`, `session`, `text`
 - `content` -> `session`, `text`
 - `contracts` -> `identifiers`, `link_metadata`
 - `conversations` -> `content`, `identifiers`, `link_metadata`, `navigation`, `profile_page`, `session`, `text`
@@ -86,6 +86,7 @@ a page-owning collaborator.
 - `get_saved_jobs`
 - `get_sidebar_profiles`
 - `react_to_post`
+- `remove_connection`
 - `repost_post`
 - `scrape_company`
 - `scrape_job`

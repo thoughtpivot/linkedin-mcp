@@ -134,6 +134,17 @@ class LinkedInExtractor:
         """Send a LinkedIn connection request or accept an incoming one."""
         return await self._connection.connect_with_person(username, note=note)
 
+    async def remove_connection(
+        self,
+        username: str,
+        *,
+        confirm_remove: bool,
+    ) -> dict[str, Any]:
+        """Remove an existing 1st-degree LinkedIn connection."""
+        return await self._connection.remove_connection(
+            username, confirm_remove=confirm_remove
+        )
+
     async def get_sidebar_profiles(self, username: str) -> dict[str, Any]:
         """Extract profile links from sidebar sections on a profile page."""
         return await self._person.get_sidebar_profiles(username)

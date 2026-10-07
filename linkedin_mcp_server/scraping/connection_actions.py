@@ -1,24 +1,32 @@
-"""Invitation actions taken on a loaded person page.
+"""Invitation and connection-remove actions taken on a loaded person page.
 
 ``connection.py`` answers what a profile's action area *says* about the
 relationship and stays browser-free; this module is everything that reads
 or touches that area: the structural signal probe, the More menu, the
 incoming-request Accept click, the invite dialog, the non-submitting
-note-quota probe and the verification re-read after a write.
+note-quota probe, removing an existing 1st-degree connection, and the
+verification re-read after a write.
 
-Per the AGENTS.md Scraping Rules every decision here rests on a URL pattern
-(``/preload/custom-invite/?vanityName=USER``, ``/in/USER/edit/intro/``,
-``/messaging/compose/``), on the *presence* of an ARIA attribute
-(``aria-label`` on a button versus an anchor, ``aria-expanded`` on the menu
-opener) or on a structural count. No label value is read anywhere, so a
-German or an opaquely labelled page classifies exactly as an English one;
+Per the AGENTS.md Scraping Rules every *classification* decision here rests
+on a URL pattern (``/preload/custom-invite/?vanityName=USER``,
+``/in/USER/edit/intro/``, ``/messaging/compose/``), on the *presence* of an
+ARIA attribute (``aria-label`` on a button versus an anchor, ``aria-expanded``
+on the menu opener) or on a structural count — never on label *values* — so
+a German or an opaquely labelled page classifies exactly as an English one;
 ``tests/test_action_signals_dom.py`` holds that line against a real DOM in
 all four label sets.
 
-The write gate is the reason the order of the checks below matters: the
-invite deeplink fires only after ``has_invite_anchor`` is true, and the only
-other thing that may open it is the note-quota probe, which never clicks a
-primary button.
+The one write that cannot be named that way is Remove connection inside the
+profile More menu: LinkedIn exposes neither a URL nor an attribute on that
+menuitem or its confirm button. Those two clicks are gated on the explicit
+en-US table in ``text.REMOVE_CONNECTION_EN`` (BrowserManager forces en-US)
+and refuse when the label is missing or ambiguous rather than guessing by
+position.
+
+The invite write gate is the reason the order of the connect checks below
+matters: the invite deeplink fires only after ``has_invite_anchor`` is true,
+and the only other thing that may open it is the note-quota probe, which
+never clicks a primary button.
 """
 
 from __future__ import annotations
@@ -34,12 +42,14 @@ from patchright.async_api import TimeoutError as PlaywrightTimeoutError
 
 import linkedin_mcp_server.scraping.connection as connection
 from linkedin_mcp_server.scraping.connection import ActionSignals
+from linkedin_mcp_server.scraping.contracts import post_action_result
 from linkedin_mcp_server.scraping.identifiers import (
     normalize_person_identifier,
     person_profile_url,
 )
 from linkedin_mcp_server.scraping.navigation import PageNavigator
 from linkedin_mcp_server.scraping.session import ScrapingSession
+from linkedin_mcp_server.scraping.text import REMOVE_CONNECTION_EN
 
 logger = logging.getLogger(__name__)
 
@@ -270,6 +280,96 @@ CLICK_INCOMING_ACCEPT_JS = (
 """
 )
 
+# Probe or click the profile More-menu "Remove connection" item. The menu is
+# portal-mounted outside <main>, so it is found by role. Labels come from the
+# en-US table (REMOVE_CONNECTION_EN); exactly one visible match is required.
+# Marker ``linkedinMcpRemoveMenu`` is the policy-trace operation id.
+_REMOVE_MENU_HELPERS_JS = r"""
+  const normalize = text => (text || '').replace(/\s+/g, ' ').trim();
+  const visible = el => {
+    if (!el || !el.isConnected) return false;
+    const style = window.getComputedStyle(el);
+    if (style.visibility === 'hidden' || style.display === 'none') return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  };
+  const menus = Array.from(document.querySelectorAll('[role="menu"]')).filter(visible);
+  const linkedinMcpRemoveMenu = true;
+"""
+
+PROBE_REMOVE_MENU_JS = (
+    r"""
+((label) => {
+"""
+    + _REMOVE_MENU_HELPERS_JS
+    + r"""
+  if (menus.length !== 1) {
+    return {status: 'no_menu', menus: menus.length, matches: 0};
+  }
+  const items = Array.from(
+    menus[0].querySelectorAll('[role="menuitem"], button')
+  ).filter(visible);
+  const matches = items.filter(item => normalize(item.innerText) === label);
+  if (matches.length === 0) {
+    return {status: 'missing', menus: 1, matches: 0, items: items.length};
+  }
+  if (matches.length !== 1) {
+    return {status: 'ambiguous', menus: 1, matches: matches.length, items: items.length};
+  }
+  return {status: 'present', menus: 1, matches: 1, items: items.length};
+})
+"""
+)
+
+CLICK_REMOVE_MENU_JS = (
+    r"""
+((label) => {
+"""
+    + _REMOVE_MENU_HELPERS_JS
+    + r"""
+  if (menus.length !== 1) return 'no_menu';
+  const items = Array.from(
+    menus[0].querySelectorAll('[role="menuitem"], button')
+  ).filter(visible);
+  const matches = items.filter(item => normalize(item.innerText) === label);
+  if (matches.length === 0) return 'missing';
+  if (matches.length !== 1) return 'ambiguous';
+  matches[0].click();
+  return 'clicked';
+})
+"""
+)
+
+# Confirm the Remove Connection dialog when LinkedIn shows one. Labels come
+# from REMOVE_CONNECTION_EN.confirm_buttons. Marker ``linkedinMcpRemoveConfirm``.
+CLICK_REMOVE_CONFIRM_JS = r"""
+((labels) => {
+  const normalize = text => (text || '').replace(/\s+/g, ' ').trim();
+  const visible = el => {
+    if (!el || !el.isConnected) return false;
+    const style = window.getComputedStyle(el);
+    if (style.visibility === 'hidden' || style.display === 'none') return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  };
+  const linkedinMcpRemoveConfirm = true;
+  const dialogs = Array.from(
+    document.querySelectorAll('dialog[open], [role="dialog"]')
+  ).filter(visible);
+  if (dialogs.length === 0) return 'no_dialog';
+  if (dialogs.length !== 1) return 'ambiguous_dialog';
+  const allowed = new Set(labels);
+  const buttons = Array.from(
+    dialogs[0].querySelectorAll('button, [role="button"]')
+  ).filter(visible);
+  const matches = buttons.filter(btn => allowed.has(normalize(btn.innerText)));
+  if (matches.length === 0) return 'missing';
+  if (matches.length !== 1) return 'ambiguous';
+  matches[0].click();
+  return 'clicked';
+})
+"""
+
 
 def _connection_result(
     url: str,
@@ -299,7 +399,7 @@ ReadMainProfile = Callable[[str], Awaitable[dict[str, Any]]]
 
 
 class ConnectionActions:
-    """Send, accept and probe invitations for one LinkedIn member."""
+    """Send, accept, probe invitations, and remove 1st-degree connections."""
 
     def __init__(
         self,
@@ -708,6 +808,196 @@ class ConnectionActions:
         note_limit_message = await self._get_premium_upsell_message()
         await self._dismiss_dialog()
         return note_limit_message
+
+    async def _escape_overlay(self) -> None:
+        """Dismiss an open More menu or dialog with Escape."""
+        try:
+            await self._session.page.keyboard.press("Escape")
+        except Exception:
+            logger.debug("Escape after remove-connection overlay failed", exc_info=True)
+
+    async def _probe_remove_menu_item(self, label: str) -> str:
+        """Return present / missing / ambiguous / no_menu for the Remove item."""
+        try:
+            result = await self._session.page.evaluate(PROBE_REMOVE_MENU_JS, label)
+        except Exception:
+            logger.debug("Remove-menu probe via JS failed", exc_info=True)
+            return "no_menu"
+        if isinstance(result, dict):
+            status = result.get("status")
+            if isinstance(status, str):
+                return status
+        return "no_menu"
+
+    async def _click_remove_menu_item(self, label: str) -> str:
+        """Click the Remove connection menuitem; return the JS status string."""
+        try:
+            result = await self._session.page.evaluate(CLICK_REMOVE_MENU_JS, label)
+        except Exception:
+            logger.debug("Remove-menu click via JS failed", exc_info=True)
+            return "no_menu"
+        return result if isinstance(result, str) else "no_menu"
+
+    async def _confirm_remove_dialog_if_present(self) -> str:
+        """Confirm a Remove Connection dialog when one appears.
+
+        Returns ``clicked`` when the confirm button was pressed, ``no_dialog``
+        when LinkedIn removed without a dialog (profile path measured that
+        way), or a refuse status when the dialog shape cannot be trusted.
+        """
+        # Give a short window for the confirm dialog; absence is a valid path.
+        try:
+            await self._session.page.wait_for_selector(
+                _DIALOG_SELECTOR, state="visible", timeout=2000
+            )
+        except PlaywrightTimeoutError:
+            return "no_dialog"
+        except Exception:
+            logger.debug("Remove-confirm dialog wait failed", exc_info=True)
+            return "no_dialog"
+
+        try:
+            result = await self._session.page.evaluate(
+                CLICK_REMOVE_CONFIRM_JS,
+                list(REMOVE_CONNECTION_EN.confirm_buttons),
+            )
+        except Exception:
+            logger.debug("Remove-confirm click via JS failed", exc_info=True)
+            return "missing"
+        return result if isinstance(result, str) else "missing"
+
+    async def remove_connection(
+        self,
+        username: str,
+        *,
+        confirm_remove: bool,
+    ) -> dict[str, Any]:
+        """Remove an existing 1st-degree connection from a profile page.
+
+        Requires state ``already_connected``. Opens the profile More menu and
+        clicks the en-US ``Remove connection`` menuitem from
+        ``REMOVE_CONNECTION_EN``; refuses with ``remove_menu_changed`` when
+        that label is missing or ambiguous. A confirm dialog, when present, is
+        accepted only via an exact confirm-button label from the same table.
+
+        ``confirm_remove=False`` only checks that the menuitem is present and
+        does not click. Evidence of a remove is a post-write profile state
+        other than ``already_connected``. ``retry_safe`` is false from the
+        moment the menuitem click is dispatched.
+        """
+        username = normalize_person_identifier(username)
+        url = person_profile_url(username, "/")
+
+        profile = await self._read_main_profile(username)
+        page_text = profile.get("sections", {}).get("main_profile", "")
+        if not page_text:
+            return post_action_result(
+                url, "unavailable", "Could not read profile page."
+            )
+
+        signals = await self._read_action_signals(username)
+        state = connection.detect_connection_state(signals)
+        logger.info(
+            "Remove-connection signals for %s: state=%s signals=%s",
+            username,
+            state,
+            signals,
+        )
+
+        if state == "self_profile":
+            return post_action_result(
+                url,
+                "self_profile",
+                "Cannot remove a connection to your own profile.",
+            )
+        if state == "pending":
+            return post_action_result(
+                url,
+                "pending",
+                "A connection request is pending; there is no 1st-degree "
+                "connection to remove. Withdraw is a separate action.",
+            )
+        if state != "already_connected":
+            return post_action_result(
+                url,
+                "not_connected",
+                f"Not a 1st-degree connection (state={state}).",
+            )
+
+        opened = await self._open_more_menu()
+        if not opened:
+            return post_action_result(
+                url,
+                "remove_unavailable",
+                "Could not open the profile More menu.",
+            )
+
+        menu_label = REMOVE_CONNECTION_EN.menu_item
+        if not confirm_remove:
+            probe = await self._probe_remove_menu_item(menu_label)
+            await self._escape_overlay()
+            if probe != "present":
+                return post_action_result(
+                    url,
+                    "remove_menu_changed",
+                    "The More menu did not offer a single "
+                    f"{menu_label!r} item (probe={probe}), so nothing was clicked.",
+                )
+            return post_action_result(
+                url,
+                "remove_ready",
+                "Set confirm_remove=true to remove this connection. The More "
+                "menu offered Remove connection.",
+            )
+
+        clicked = await self._click_remove_menu_item(menu_label)
+        if clicked != "clicked":
+            await self._escape_overlay()
+            return post_action_result(
+                url,
+                "remove_menu_changed",
+                "The More menu did not offer a single "
+                f"{menu_label!r} item (status={clicked}), so nothing was clicked.",
+            )
+
+        # Menuitem click dispatched — a retry may remove twice or race a dialog.
+        confirm_status = await self._confirm_remove_dialog_if_present()
+        if confirm_status not in ("clicked", "no_dialog"):
+            await self._escape_overlay()
+            return post_action_result(
+                url,
+                "remove_failed",
+                "Remove connection was clicked but the confirm dialog could "
+                f"not be trusted (status={confirm_status}). Check the profile "
+                "before retrying.",
+                retry_safe=False,
+            )
+
+        verified_state = None
+        for attempt in range(2):
+            if attempt:
+                await asyncio.sleep(3.0)
+            await self._read_main_profile(username)
+            verified_signals = await self._read_action_signals(username)
+            verified_state = connection.detect_connection_state(verified_signals)
+            if verified_state != "already_connected":
+                break
+
+        if verified_state == "already_connected":
+            return post_action_result(
+                url,
+                "remove_failed",
+                "Remove was submitted but the profile still reads as connected.",
+                retry_safe=False,
+            )
+
+        return post_action_result(
+            url,
+            "removed",
+            f"Connection removed. State after remove: {verified_state}.",
+            acted=True,
+            retry_safe=False,
+        )
 
     async def connect_with_person(
         self,

@@ -52,6 +52,7 @@ class TestEveryNormalizedEntryPoint:
         [
             ("scrape_person", ("../../feed", {"main_profile"}), {}),
             ("connect_with_person", ("../../feed",), {}),
+            ("remove_connection", ("../../feed",), {"confirm_remove": False}),
             ("get_sidebar_profiles", ("../../feed",), {}),
             ("send_message", ("../../feed", "hi"), {"confirm_send": False}),
             ("scrape_company", ("../../feed", {"about"}), {}),

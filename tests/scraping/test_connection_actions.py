@@ -733,6 +733,315 @@ class TestConnectWithPerson:
         read.assert_awaited_once_with("williamhgates")
 
 
+class TestRemoveConnection:
+    async def test_not_connected_refuses_without_opening_more(self, mock_page):
+        text = "Jane\n\n· 3rd\n\nEngineer\n\nConnect\nMore\nAbout\n"
+        actions = _actions(mock_page, _reads(text))
+
+        with (
+            patch.object(
+                actions,
+                "_read_action_signals",
+                new_callable=AsyncMock,
+                return_value=_signals(invite=True, labeled_action=True),
+            ),
+            patch.object(
+                actions, "_open_more_menu", new_callable=AsyncMock
+            ) as open_more,
+        ):
+            result = await actions.remove_connection("testuser", confirm_remove=False)
+
+        assert result["status"] == "not_connected"
+        assert result["acted"] is False
+        assert result["retry_safe"] is True
+        open_more.assert_not_awaited()
+
+    async def test_self_profile_refuses(self, mock_page):
+        actions = _actions(mock_page, _reads("Own profile"))
+
+        with patch.object(
+            actions,
+            "_read_action_signals",
+            new_callable=AsyncMock,
+            return_value=_signals(edit=True, labeled_action=True),
+        ):
+            result = await actions.remove_connection("testuser", confirm_remove=True)
+
+        assert result["status"] == "self_profile"
+        assert result["retry_safe"] is True
+
+    async def test_pending_refuses(self, mock_page):
+        actions = _actions(mock_page, _reads("Pending profile"))
+
+        with patch.object(
+            actions,
+            "_read_action_signals",
+            new_callable=AsyncMock,
+            return_value=_signals(compose=True, labeled_anchor=True),
+        ):
+            result = await actions.remove_connection("testuser", confirm_remove=True)
+
+        assert result["status"] == "pending"
+        assert result["retry_safe"] is True
+
+    async def test_dry_run_reports_remove_ready_when_menuitem_present(self, mock_page):
+        text = "Jane\n\n· 1st\n\nEngineer\n\nMessage\nMore\nAbout\n"
+        actions = _actions(mock_page, _reads(text))
+
+        with (
+            patch.object(
+                actions,
+                "_read_action_signals",
+                new_callable=AsyncMock,
+                return_value=_signals(compose=True),
+            ),
+            patch.object(
+                actions, "_open_more_menu", new_callable=AsyncMock, return_value=True
+            ),
+            patch.object(
+                actions,
+                "_probe_remove_menu_item",
+                new_callable=AsyncMock,
+                return_value="present",
+            ) as probe,
+            patch.object(
+                actions, "_click_remove_menu_item", new_callable=AsyncMock
+            ) as click,
+        ):
+            result = await actions.remove_connection("testuser", confirm_remove=False)
+
+        assert result["status"] == "remove_ready"
+        assert result["acted"] is False
+        assert result["retry_safe"] is True
+        probe.assert_awaited_once_with("Remove connection")
+        click.assert_not_awaited()
+
+    async def test_dry_run_refuses_when_menuitem_missing(self, mock_page):
+        text = "Jane\n\n· 1st\n\nEngineer\n\nMessage\nMore\nAbout\n"
+        actions = _actions(mock_page, _reads(text))
+
+        with (
+            patch.object(
+                actions,
+                "_read_action_signals",
+                new_callable=AsyncMock,
+                return_value=_signals(compose=True),
+            ),
+            patch.object(
+                actions, "_open_more_menu", new_callable=AsyncMock, return_value=True
+            ),
+            patch.object(
+                actions,
+                "_probe_remove_menu_item",
+                new_callable=AsyncMock,
+                return_value="missing",
+            ),
+            patch.object(
+                actions, "_click_remove_menu_item", new_callable=AsyncMock
+            ) as click,
+        ):
+            result = await actions.remove_connection("testuser", confirm_remove=False)
+
+        assert result["status"] == "remove_menu_changed"
+        assert result["retry_safe"] is True
+        click.assert_not_awaited()
+
+    async def test_more_menu_failure_is_unavailable(self, mock_page):
+        text = "Jane\n\n· 1st\n\nEngineer\n\nMessage\nMore\nAbout\n"
+        actions = _actions(mock_page, _reads(text))
+
+        with (
+            patch.object(
+                actions,
+                "_read_action_signals",
+                new_callable=AsyncMock,
+                return_value=_signals(compose=True),
+            ),
+            patch.object(
+                actions, "_open_more_menu", new_callable=AsyncMock, return_value=False
+            ),
+        ):
+            result = await actions.remove_connection("testuser", confirm_remove=True)
+
+        assert result["status"] == "remove_unavailable"
+        assert result["retry_safe"] is True
+
+    async def test_removes_when_no_confirm_dialog(self, mock_page):
+        connected = "Jane\n\n· 1st\n\nMessage\nMore\n"
+        after = "Jane\n\n· 2nd\n\nConnect\nMore\n"
+        actions = _actions(mock_page, _reads(connected, after))
+
+        with (
+            patch.object(
+                actions,
+                "_read_action_signals",
+                new_callable=AsyncMock,
+                side_effect=[_signals(compose=True), _signals(invite=True)],
+            ),
+            patch.object(
+                actions, "_open_more_menu", new_callable=AsyncMock, return_value=True
+            ),
+            patch.object(
+                actions,
+                "_click_remove_menu_item",
+                new_callable=AsyncMock,
+                return_value="clicked",
+            ),
+            patch.object(
+                actions,
+                "_confirm_remove_dialog_if_present",
+                new_callable=AsyncMock,
+                return_value="no_dialog",
+            ),
+        ):
+            result = await actions.remove_connection("testuser", confirm_remove=True)
+
+        assert result["status"] == "removed"
+        assert result["acted"] is True
+        assert result["retry_safe"] is False
+
+    async def test_removes_after_confirm_dialog(self, mock_page):
+        connected = "Jane\n\n· 1st\n\nMessage\nMore\n"
+        after = "Jane\n\n· 2nd\n\nConnect\nMore\n"
+        actions = _actions(mock_page, _reads(connected, after))
+
+        with (
+            patch.object(
+                actions,
+                "_read_action_signals",
+                new_callable=AsyncMock,
+                side_effect=[_signals(compose=True), _signals(invite=True)],
+            ),
+            patch.object(
+                actions, "_open_more_menu", new_callable=AsyncMock, return_value=True
+            ),
+            patch.object(
+                actions,
+                "_click_remove_menu_item",
+                new_callable=AsyncMock,
+                return_value="clicked",
+            ),
+            patch.object(
+                actions,
+                "_confirm_remove_dialog_if_present",
+                new_callable=AsyncMock,
+                return_value="clicked",
+            ),
+        ):
+            result = await actions.remove_connection("testuser", confirm_remove=True)
+
+        assert result["status"] == "removed"
+        assert result["acted"] is True
+        assert result["retry_safe"] is False
+
+    async def test_menu_mismatch_before_click_keeps_retry_safe(self, mock_page):
+        text = "Jane\n\n· 1st\n\nMessage\nMore\n"
+        actions = _actions(mock_page, _reads(text))
+
+        with (
+            patch.object(
+                actions,
+                "_read_action_signals",
+                new_callable=AsyncMock,
+                return_value=_signals(compose=True),
+            ),
+            patch.object(
+                actions, "_open_more_menu", new_callable=AsyncMock, return_value=True
+            ),
+            patch.object(
+                actions,
+                "_click_remove_menu_item",
+                new_callable=AsyncMock,
+                return_value="ambiguous",
+            ),
+            patch.object(
+                actions,
+                "_confirm_remove_dialog_if_present",
+                new_callable=AsyncMock,
+            ) as confirm,
+        ):
+            result = await actions.remove_connection("testuser", confirm_remove=True)
+
+        assert result["status"] == "remove_menu_changed"
+        assert result["retry_safe"] is True
+        confirm.assert_not_awaited()
+
+    async def test_unconfirmed_remove_is_not_retry_safe(self, mock_page):
+        text = "Jane\n\n· 1st\n\nMessage\nMore\n"
+        actions = _actions(mock_page, _reads(text, text, text))
+
+        with (
+            patch.object(
+                actions,
+                "_read_action_signals",
+                new_callable=AsyncMock,
+                side_effect=[
+                    _signals(compose=True),
+                    _signals(compose=True),
+                    _signals(compose=True),
+                ],
+            ),
+            patch.object(
+                actions, "_open_more_menu", new_callable=AsyncMock, return_value=True
+            ),
+            patch.object(
+                actions,
+                "_click_remove_menu_item",
+                new_callable=AsyncMock,
+                return_value="clicked",
+            ),
+            patch.object(
+                actions,
+                "_confirm_remove_dialog_if_present",
+                new_callable=AsyncMock,
+                return_value="no_dialog",
+            ),
+            patch(
+                "linkedin_mcp_server.scraping.connection_actions.asyncio.sleep",
+                new_callable=AsyncMock,
+            ),
+        ):
+            result = await actions.remove_connection("testuser", confirm_remove=True)
+
+        assert result["status"] == "remove_failed"
+        assert result["acted"] is False
+        assert result["retry_safe"] is False
+
+    async def test_untrusted_confirm_dialog_after_click_is_not_retry_safe(
+        self, mock_page
+    ):
+        text = "Jane\n\n· 1st\n\nMessage\nMore\n"
+        actions = _actions(mock_page, _reads(text))
+
+        with (
+            patch.object(
+                actions,
+                "_read_action_signals",
+                new_callable=AsyncMock,
+                return_value=_signals(compose=True),
+            ),
+            patch.object(
+                actions, "_open_more_menu", new_callable=AsyncMock, return_value=True
+            ),
+            patch.object(
+                actions,
+                "_click_remove_menu_item",
+                new_callable=AsyncMock,
+                return_value="clicked",
+            ),
+            patch.object(
+                actions,
+                "_confirm_remove_dialog_if_present",
+                new_callable=AsyncMock,
+                return_value="ambiguous",
+            ),
+        ):
+            result = await actions.remove_connection("testuser", confirm_remove=True)
+
+        assert result["status"] == "remove_failed"
+        assert result["retry_safe"] is False
+
+
 class TestInviteDialog:
     async def test_premium_upsell_message_reads_linkedin_dialog_text(self, mock_page):
         """Premium upsell detection returns LinkedIn's raw dialog text."""

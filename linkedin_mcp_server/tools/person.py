@@ -19,7 +19,10 @@ from linkedin_mcp_server.core.exceptions import AuthenticationError
 from linkedin_mcp_server.dependencies import get_ready_extractor, handle_auth_error
 from linkedin_mcp_server.error_handler import raise_tool_error
 from linkedin_mcp_server.scraping import parse_person_sections
-from linkedin_mcp_server.scraping.contracts import FilterValidationError
+from linkedin_mcp_server.scraping.contracts import (
+    REMOVE_CONNECTION_INTERRUPTED_WARNING,
+    FilterValidationError,
+)
 from linkedin_mcp_server.scraping.identifiers import normalize_person_identifier
 from linkedin_mcp_server.scraping.search_urls import build_people_search_url
 
@@ -302,6 +305,88 @@ def register_person_tools(
                 raise_tool_error(relogin_exc, "connect_with_person")
         except Exception as e:
             raise_tool_error(e, "connect_with_person")  # NoReturn
+
+    @mcp.tool(
+        timeout=tool_timeout,
+        title="Remove Connection",
+        annotations={"destructiveHint": True, "openWorldHint": True},
+        tags={"person", "actions"},
+    )
+    async def remove_connection(
+        linkedin_username: str,
+        confirm_remove: bool,
+        ctx: Context,
+    ) -> dict[str, Any]:
+        """
+        Remove an existing 1st-degree LinkedIn connection.
+
+        This is a write operation when confirm_remove is True. Call it first
+        with confirm_remove=False to check that the profile is connected and
+        that the More menu still offers Remove connection, without clicking.
+
+        One username (or profile URL) per call. To remove many people from a
+        LinkedIn connections export, loop this tool over each profile URL or
+        username: key retries only on ``retry_safe``, and space calls so each
+        remove is one profile navigation.
+
+        Withdraw of a pending invitation is not this tool.
+
+        Args:
+            linkedin_username: LinkedIn username (e.g., "stickerdaniel"). A
+                full profile URL is accepted too and is reduced to the username.
+            confirm_remove: Must be True to remove the connection
+            ctx: FastMCP context for progress reporting
+
+        Returns:
+            Dict with url, status, message, acted and retry_safe.
+            Statuses: remove_ready, removed, not_connected, pending,
+            self_profile, remove_unavailable, remove_menu_changed,
+            remove_failed, unavailable.
+
+            ``acted`` is true only when the profile no longer reads as
+            connected after the remove. ``retry_safe`` is false from the
+            moment the Remove connection menuitem is clicked; retrying while
+            it is false can remove twice or race a confirm dialog.
+
+            A status of ``outcome_unknown`` comes from the transport rather
+            than the page and carries ``retry_safe: False``.
+        """
+        try:
+            linkedin_username = normalize_person_identifier(linkedin_username)
+            extractor = await get_ready_extractor(ctx, tool_name="remove_connection")
+            logger.info(
+                "Removing connection with %s (confirm_remove=%s)",
+                linkedin_username,
+                confirm_remove,
+            )
+
+            await ctx.report_progress(
+                progress=0,
+                total=100,
+                message="Starting LinkedIn remove-connection flow",
+            )
+
+            result = await extractor.remove_connection(
+                linkedin_username,
+                confirm_remove=confirm_remove,
+            )
+
+            try:
+                await ctx.report_progress(progress=100, total=100, message="Complete")
+            except BaseException:
+                if result.get("retry_safe") is False:
+                    logger.warning(REMOVE_CONNECTION_INTERRUPTED_WARNING)
+                raise
+
+            return result
+
+        except AuthenticationError as e:
+            try:
+                await handle_auth_error(e, ctx)
+            except Exception as relogin_exc:
+                raise_tool_error(relogin_exc, "remove_connection")
+        except Exception as e:
+            raise_tool_error(e, "remove_connection")  # NoReturn
 
     @mcp.tool(
         timeout=tool_timeout,

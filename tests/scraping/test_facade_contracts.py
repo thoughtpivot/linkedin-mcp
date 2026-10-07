@@ -47,6 +47,7 @@ from .support.policy_trace import ScriptedPage, TraceRecorder
 TOOL_DELEGATES = {
     "comment_on_post": "comment_on_post",
     "connect_with_person": "connect_with_person",
+    "remove_connection": "remove_connection",
     "get_company_employees": "get_company_employees",
     "get_company_posts": "extract_page",
     "get_company_profile": "scrape_company",
@@ -213,6 +214,27 @@ async def test_facade_connect_forwards_the_optional_note(mock_page):
 
     assert result is expected
     connect.assert_awaited_once_with("target", note="context")
+
+
+async def test_facade_remove_connection_forwards_confirm_remove(mock_page):
+    extractor = LinkedInExtractor(cast(Page, mock_page))
+    expected = {
+        "url": "https://www.linkedin.com/in/target/",
+        "status": "remove_ready",
+        "acted": False,
+        "retry_safe": True,
+    }
+
+    with patch.object(
+        ConnectionActions,
+        "remove_connection",
+        new_callable=AsyncMock,
+        return_value=expected,
+    ) as remove:
+        result = await extractor.remove_connection("target", confirm_remove=False)
+
+    assert result is expected
+    remove.assert_awaited_once_with("target", confirm_remove=False)
 
 
 async def test_connection_profile_read_resolves_the_facade_delegate_late(mock_page):

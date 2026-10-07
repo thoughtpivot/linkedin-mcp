@@ -53,6 +53,15 @@ POST_ACTION_INTERRUPTED_WARNING = (
     "open the post before retrying, as a retry may publish it twice."
 )
 
+# Same in-flight blind spot for remove_connection: the More-menu click that
+# starts a remove may already have landed when the tool deadline cancels the
+# final progress report, and a retry then races a second remove attempt.
+REMOVE_CONNECTION_INTERRUPTED_WARNING = (
+    "A remove-connection action was interrupted while in flight. The outcome "
+    "is unknown; check the profile before retrying, as a retry may remove "
+    "the connection twice."
+)
+
 
 def rate_limited_section_error() -> dict[str, str]:
     """The ``section_errors`` entry for a section that came back empty.

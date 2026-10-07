@@ -8,7 +8,7 @@ A Model Context Protocol (MCP) server that connects AI assistants to LinkedIn. A
 
 - **Profile Access**: Get detailed LinkedIn profile information including experience, education, skills, projects, certifications, and more
 - **Own Profile**: Fetch the authenticated user's own profile to give agents self-context
-- **Profile Connections**: Send connection requests or accept incoming ones, with optional notes
+- **Profile Connections**: Send connection requests or accept incoming ones, with optional notes; remove an existing 1st-degree connection with explicit confirmation (batch removes by looping one username/URL at a time)
 - **Sidebar Profiles**: Extract profile URLs from the sidebar recommendation sections on a profile page ("More profiles for you", "Explore premium profiles", "People you may know")
 - **Messaging**: List the inbox, read a conversation by username or thread ID, search messages by keyword, and compose/send a new message with explicit confirmation (profile-based send may open a separate DM rather than reply in an existing thread)
 - **Company Profiles**: Extract comprehensive company data, including the LinkedIn company URN id (used by LinkedIn's people-search `currentCompany` URL facet)

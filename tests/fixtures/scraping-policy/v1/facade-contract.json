@@ -64,6 +64,10 @@
         "coroutine": true,
         "signature": "(self, post: 'str', *, reaction: 'str' = 'like') -> 'dict[str, Any]'"
       },
+      "remove_connection": {
+        "coroutine": true,
+        "signature": "(self, username: 'str', *, confirm_remove: 'bool') -> 'dict[str, Any]'"
+      },
       "repost_post": {
         "coroutine": true,
         "signature": "(self, post: 'str', *, confirm_repost: 'bool', commentary: 'str | None' = None) -> 'dict[str, Any]'"
@@ -117,6 +121,7 @@
       "get_saved_jobs",
       "get_sidebar_profiles",
       "react_to_post",
+      "remove_connection",
       "repost_post",
       "scrape_company",
       "scrape_job",
@@ -525,6 +530,30 @@
           },
           "required": [
             "post"
+          ],
+          "type": "object"
+        },
+        "output": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      "remove_connection": {
+        "input": {
+          "additionalProperties": false,
+          "properties": {
+            "confirm_remove": {
+              "description": "Must be True to remove the connection",
+              "type": "boolean"
+            },
+            "linkedin_username": {
+              "description": "LinkedIn username (e.g., \"stickerdaniel\"). A\nfull profile URL is accepted too and is reduced to the username.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "linkedin_username",
+            "confirm_remove"
           ],
           "type": "object"
         },

@@ -60,6 +60,10 @@
       "description": "Send a connection request or accept an incoming one, with optional note"
     },
     {
+      "name": "remove_connection",
+      "description": "Remove an existing 1st-degree LinkedIn connection with explicit confirmation; one username or profile URL per call, so batch removes loop this tool over a connections export"
+    },
+    {
       "name": "get_sidebar_profiles",
       "description": "Extract profile URLs from LinkedIn sidebar recommendation sections on a profile page"
     },

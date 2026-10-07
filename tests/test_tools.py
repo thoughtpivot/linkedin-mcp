@@ -36,6 +36,7 @@ def _make_mock_extractor(scrape_result: dict) -> MagicMock:
     mock = MagicMock()
     mock.scrape_person = AsyncMock(return_value=scrape_result)
     mock.connect_with_person = AsyncMock(return_value=scrape_result)
+    mock.remove_connection = AsyncMock(return_value=scrape_result)
     mock.scrape_company = AsyncMock(return_value=scrape_result)
     mock.scrape_job = AsyncMock(return_value=scrape_result)
     mock.search_jobs = AsyncMock(return_value=scrape_result)
@@ -95,6 +96,12 @@ def serve_extractor(monkeypatch: pytest.MonkeyPatch) -> Callable[[Any], AsyncMoc
             "person",
             "connect_with_person",
             {"linkedin_username": "/feed/"},
+            "not a personal profile",
+        ),
+        (
+            "person",
+            "remove_connection",
+            {"linkedin_username": "/feed/", "confirm_remove": False},
             "not a personal profile",
         ),
         (
@@ -229,6 +236,11 @@ async def test_invalid_reference_is_rejected_before_extractor(
         ("person", "get_person_profile", {"linkedin_username": "alice"}),
         ("person", "search_people", {"keywords": "engineer"}),
         ("person", "connect_with_person", {"linkedin_username": "alice"}),
+        (
+            "person",
+            "remove_connection",
+            {"linkedin_username": "alice", "confirm_remove": False},
+        ),
         ("person", "get_sidebar_profiles", {"linkedin_username": "alice"}),
         ("person", "get_my_profile", {}),
         ("company", "get_company_profile", {"company_name": "anthropic"}),
@@ -693,6 +705,62 @@ class TestPersonTool:
         mock_extractor.connect_with_person.assert_awaited_once_with(
             "test-user",
             note=None,
+        )
+
+    async def test_remove_connection(self, mock_context, serve_extractor):
+        expected = {
+            "url": "https://www.linkedin.com/in/test-user/",
+            "status": "removed",
+            "message": "Connection removed.",
+            "acted": True,
+            "retry_safe": False,
+        }
+        mock_extractor = _make_mock_extractor(expected)
+
+        from linkedin_mcp_server.tools.person import register_person_tools
+
+        mcp = FastMCP("test")
+        register_person_tools(mcp)
+
+        serve_extractor(mock_extractor)
+        tool_fn = await get_tool_fn(mcp, "remove_connection")
+        result = await tool_fn(
+            "https://www.linkedin.com/in/test-user/",
+            True,
+            mock_context,
+        )
+
+        assert result["status"] == "removed"
+        assert result["acted"] is True
+        assert result["retry_safe"] is False
+        mock_extractor.remove_connection.assert_awaited_once_with(
+            "test-user",
+            confirm_remove=True,
+        )
+
+    async def test_remove_connection_dry_run(self, mock_context, serve_extractor):
+        expected = {
+            "url": "https://www.linkedin.com/in/test-user/",
+            "status": "remove_ready",
+            "message": "Set confirm_remove=true to remove this connection.",
+            "acted": False,
+            "retry_safe": True,
+        }
+        mock_extractor = _make_mock_extractor(expected)
+
+        from linkedin_mcp_server.tools.person import register_person_tools
+
+        mcp = FastMCP("test")
+        register_person_tools(mcp)
+
+        serve_extractor(mock_extractor)
+        tool_fn = await get_tool_fn(mcp, "remove_connection")
+        result = await tool_fn("test-user", False, mock_context)
+
+        assert result["status"] == "remove_ready"
+        mock_extractor.remove_connection.assert_awaited_once_with(
+            "test-user",
+            confirm_remove=False,
         )
 
     async def test_connect_with_person_custom_note_limit_reached(

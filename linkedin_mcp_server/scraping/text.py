@@ -300,6 +300,33 @@ _SIDEBAR_CHROME_STRINGS: dict[str, SidebarChromeTable] = {
 SIDEBAR_CHROME_EN = _SIDEBAR_CHROME_STRINGS["en"]
 
 
+# Profile More-menu "Remove connection" and its confirm dialog. Neither control
+# exposes a locale-independent URL or attribute: the menuitem and the confirm
+# button are identified by visible text only. Matched whole against normalized
+# labels from this table (CLAUDE.md → Scraping Rules). BrowserManager forces
+# en-US, so the "en" entry is the operative one; a missing label refuses the
+# click rather than guessing by position.
+@dataclass(frozen=True)
+class RemoveConnectionTextTable:
+    # Exact More-menu item that starts the remove flow.
+    menu_item: str
+    # Exact confirm-dialog button labels LinkedIn has used. Profile and
+    # connections-list surfaces have differed ("Remove" vs repeating
+    # "Remove connection"); either is accepted when exactly one matching
+    # button is present.
+    confirm_buttons: tuple[str, ...]
+
+
+_REMOVE_CONNECTION_STRINGS: dict[str, RemoveConnectionTextTable] = {
+    "en": RemoveConnectionTextTable(
+        menu_item="Remove connection",
+        confirm_buttons=("Remove", "Remove connection"),
+    ),
+}
+
+REMOVE_CONNECTION_EN = _REMOVE_CONNECTION_STRINGS["en"]
+
+
 @dataclass(frozen=True)
 class JobSearchTextTable:
     """Visible-text policy for reading a job search results page."""

@@ -959,6 +959,43 @@ async def _connect_scenario() -> dict[str, Any]:
     )
 
 
+async def _remove_connection_scenario() -> dict[str, Any]:
+    name = "remove_connection__not_connected"
+    recorder = TraceRecorder(name, _COMMON_ALLOWED)
+    clock = FakeClock(recorder)
+    page = _page(recorder)
+    page.script("evaluate:root_content", _root("Someone else's profile"))
+    _script_profile_target(page, "unavailable")
+    page.script(
+        "evaluate:connection_action_signals",
+        {
+            "hasInvite": True,
+            "hasComposeInActionRoot": False,
+            "hasEditIntro": False,
+            "hasLabeledActionButton": True,
+            "hasLabeledActionAnchor": False,
+            "hasIncomingActionRow": False,
+        },
+    )
+    extractor = _extractor(page)
+    async with boundaries(recorder, clock):
+        with recorder.context("remove_connection", "main_profile"):
+            result = await extractor.remove_connection(
+                "ada-lovelace", confirm_remove=False
+            )
+    page.assert_clean()
+    return recorder.trace(
+        {
+            "method": "remove_connection",
+            "arguments": {
+                "username": "ada-lovelace",
+                "confirm_remove": False,
+            },
+        },
+        result,
+    )
+
+
 async def _sidebar_scenario() -> dict[str, Any]:
     name = "get_sidebar_profiles__baseline"
     recorder = TraceRecorder(name, _COMMON_ALLOWED)
@@ -1239,6 +1276,7 @@ TOOL_FACADE_METHODS = {
     "get_saved_jobs",
     "get_sidebar_profiles",
     "react_to_post",
+    "remove_connection",
     "repost_post",
     "scrape_company",
     "scrape_job",
@@ -1309,6 +1347,7 @@ async def build_policy_traces() -> dict[str, dict[str, Any]]:
         "message-c0.json": await _invalid_message_scenario("line\nbreak", "c0"),
         "message-del.json": await _invalid_message_scenario("text\x7f", "del"),
         "connect.json": await _connect_scenario(),
+        "remove-connection.json": await _remove_connection_scenario(),
         "get-my-profile.json": await _get_my_profile_scenario(),
         "sidebar-profiles.json": await _sidebar_scenario(),
         "company-employees.json": await _single_capture_facade_scenario(

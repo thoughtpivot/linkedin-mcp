@@ -102,9 +102,9 @@ Put authentication in front of a tunnel. The server does not provide it.
 
 ## Tools
 
-An assistant calls these by name. Comment and repost publish only when `confirm_comment` or `confirm_repost` is true. A reaction this account already gave is refused, because clicking it again would remove it. `send_message` targets a profile and can open a new conversation.
+An assistant calls these by name. Comment, repost, and remove_connection publish only when `confirm_comment`, `confirm_repost`, or `confirm_remove` is true. A reaction this account already gave is refused, because clicking it again would remove it. `send_message` targets a profile and can open a new conversation. Batch connection removes are done by looping `remove_connection` over usernames or profile URLs from a connections export.
 
-- **People:** `get_person_profile`, `get_my_profile`, `search_people`, `get_sidebar_profiles`, `connect_with_person`
+- **People:** `get_person_profile`, `get_my_profile`, `search_people`, `get_sidebar_profiles`, `connect_with_person`, `remove_connection`
 - **Messages:** `get_inbox`, `get_conversation`, `search_conversations`, `send_message`
 - **Companies:** `get_company_profile`, `get_company_posts`, `search_companies`, `get_company_employees`
 - **Jobs:** `search_jobs`, `get_saved_jobs`, `get_job_details`
