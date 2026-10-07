@@ -1221,6 +1221,57 @@ class TestPostPermalinkCapture:
         )
         assert CaptureMode.POST_PERMALINKS not in plan.mode
 
+    def test_company_posts_url_selects_post_permalink_mode(self):
+        plan = capture_plan_for_url(
+            "https://www.linkedin.com/company/acme/posts/"
+            "?viewAsMember=true&feedView=all"
+        )
+        assert CaptureMode.ACTIVITY in plan.mode
+        assert CaptureMode.POST_PERMALINKS in plan.mode
+
+    def test_person_activity_url_does_not_select_post_permalink_mode(self):
+        plan = capture_plan_for_url(
+            "https://www.linkedin.com/in/ada/recent-activity/all/"
+        )
+        assert plan.mode == CaptureMode.ACTIVITY
+
+    async def test_company_posts_keep_page_text_and_append_permalinks(self, mock_page):
+        page_text = ("Company update " * 30).strip()
+        ops, listeners = self._page_with_listeners(mock_page, [])
+        mock_page.evaluate = AsyncMock(
+            return_value={"source": "root", "text": page_text, "references": []}
+        )
+        response = self._response(
+            body=(
+                b'{"postSlugUrl":"https://www.linkedin.com/posts/acme_hello-ugcPost-'
+                b'1234567890-z"}'
+            )
+        )
+
+        async def scroll(*args, **kwargs):
+            for callback in list(listeners["response"]):
+                callback(response)
+
+        capture = _capture(mock_page)
+        url = (
+            "https://www.linkedin.com/company/acme/posts/"
+            "?viewAsMember=true&feedView=all"
+        )
+        with self._quiet_patches(scroll):
+            result = await capture.capture(
+                url,
+                "posts",
+                capture_plan_for_url(url, max_scrolls=2),
+            )
+
+        assert result.text == page_text
+        assert ops.index(("listener.add", "response")) < ops.index(("navigate", None))
+        assert [ref["url"] for ref in result.references] == [
+            "/posts/acme_hello-ugcPost-1234567890-z"
+        ]
+        assert result.references[0]["kind"] == "feed_post"
+        assert result.references[0]["context"] == "posts"
+
     async def test_listener_installs_before_navigation_and_captures_both_forms(
         self, mock_page
     ):
@@ -2007,7 +2058,7 @@ class TestCapturePlans:
             ),
             (
                 "https://www.linkedin.com/company/acme/posts/?viewAsMember=true",
-                CaptureMode.ACTIVITY,
+                CaptureMode.ACTIVITY | CaptureMode.POST_PERMALINKS,
             ),
             (
                 "https://www.linkedin.com/search/results/people/"

@@ -229,7 +229,7 @@ class TestScrapeCompany:
             CaptureMode.STANDARD,
             CaptureMode.STANDARD,
             CaptureMode.STANDARD,
-            CaptureMode.ACTIVITY,
+            CaptureMode.ACTIVITY | CaptureMode.POST_PERMALINKS,
             CaptureMode.STANDARD,
             CaptureMode.STANDARD,
         ]

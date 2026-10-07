@@ -111,7 +111,13 @@ class TestCompanySections:
         pins: without ACTIVITY the capture takes one screenful and stops.
         """
         url = company_page_url("acme", COMPANY_SECTIONS["posts"][0])
-        assert CaptureMode.ACTIVITY in capture_plan_for_url(url).mode
+        mode = capture_plan_for_url(url).mode
+        assert CaptureMode.ACTIVITY in mode
+        assert CaptureMode.POST_PERMALINKS in mode
+        activity = capture_plan_for_url(
+            "https://www.linkedin.com/in/ada/recent-activity/all/"
+        ).mode
+        assert activity == CaptureMode.ACTIVITY
 
 
 def test_exact_tuple_contract_rejects_equal_tuple_subclasses():

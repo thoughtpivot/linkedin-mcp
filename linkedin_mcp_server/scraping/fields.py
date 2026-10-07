@@ -63,7 +63,7 @@ _PERSON_SECTION_MODES = {
     "contact_info": CaptureMode.OVERLAY,
     "posts": CaptureMode.ACTIVITY,
 }
-_COMPANY_SECTION_MODES = {"posts": CaptureMode.ACTIVITY}
+_COMPANY_SECTION_MODES = {"posts": CaptureMode.ACTIVITY | CaptureMode.POST_PERMALINKS}
 
 
 def _person_section_specs(

@@ -118,7 +118,10 @@ def register_company_tools(
 
         Returns:
             Dict with url, sections (name -> raw text), and optional references.
-            The LLM should parse the raw text to extract individual posts.
+            The section text is the page's innerText. Post permalinks read from
+            the page's JSON and document responses are appended as references
+            and do not replace that text. The LLM should parse the raw text
+            to extract individual posts.
         """
         try:
             company_name = normalize_company_identifier(company_name)

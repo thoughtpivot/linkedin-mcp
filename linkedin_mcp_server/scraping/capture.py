@@ -77,10 +77,13 @@ def capture_plan_for_url(url: str, max_scrolls: int | None = None) -> CapturePla
     """Translate a generic compatibility URL into its historical capture policy."""
     path = urlparse(url).path
     mode = CaptureMode.STANDARD
-    if "/recent-activity/" in path or (
-        "/company/" in path and path.rstrip("/").endswith("/posts")
-    ):
+    if "/recent-activity/" in path:
         mode |= CaptureMode.ACTIVITY
+    # Company posts are the same JSON/document payloads the feed already
+    # reads. The permalink listener appends those URLs; the section text
+    # stays the page's innerText.
+    if "/company/" in path and path.rstrip("/").endswith("/posts"):
+        mode |= CaptureMode.ACTIVITY | CaptureMode.POST_PERMALINKS
     if "/search/results/" in path:
         mode |= CaptureMode.SEARCH_RESULTS
     if path.startswith("/search/results/content"):

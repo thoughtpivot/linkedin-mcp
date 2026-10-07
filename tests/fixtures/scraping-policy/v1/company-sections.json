@@ -116,6 +116,12 @@
     {
       "call": "scrape_company",
       "callback_id": "callback-2",
+      "event": "response",
+      "kind": "listener.add"
+    },
+    {
+      "call": "scrape_company",
+      "callback_id": "callback-3",
       "event": "framenavigated",
       "kind": "listener.add"
     },
@@ -158,7 +164,7 @@
     },
     {
       "call": "scrape_company",
-      "callback_id": "callback-2",
+      "callback_id": "callback-3",
       "event": "framenavigated",
       "kind": "listener.remove"
     },
@@ -207,6 +213,12 @@
     },
     {
       "call": "scrape_company",
+      "callback_id": "callback-4",
+      "event": "response",
+      "kind": "listener.remove"
+    },
+    {
+      "call": "scrape_company",
       "kind": "callback.progress",
       "message": "Scraped posts (2/3)",
       "percent": 63
@@ -219,7 +231,7 @@
     },
     {
       "call": "scrape_company",
-      "callback_id": "callback-3",
+      "callback_id": "callback-5",
       "event": "framenavigated",
       "kind": "listener.add"
     },
@@ -262,7 +274,7 @@
     },
     {
       "call": "scrape_company",
-      "callback_id": "callback-3",
+      "callback_id": "callback-5",
       "event": "framenavigated",
       "kind": "listener.remove"
     },
