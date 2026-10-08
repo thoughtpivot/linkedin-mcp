@@ -328,7 +328,6 @@ for that.
 Always read [`CONTRIBUTING.md`](CONTRIBUTING.md) before filing an issue or working on this repository.
 
 - Write a short synthetic prompt that would reproduce the PR diff if given to a fresh Claude Code session. Don't copy the user's first message — distill the conversation into a single instruction that captures the full scope of changes. This tells the maintainer what was intended, which is often more useful than reviewing the full diff. Use a Markdown blockquote under a `## Synthetic prompt` heading.
-- The final non-empty line of every PR body must disclose every model used. CI skips the summary block Macroscope appends, so leave the attribution where you wrote it. CI accepts `Generated with <model>` or `Generated with <model>.` as the minimum. The final period is optional only for this model-only form. Prefer the detailed form `Generated with <model> for <job> in <harness>.`; for example, `Generated with Claude Opus 5 for implementation in Claude Code via T3 Code.` A harness is the coding-agent runtime that invokes the model and tools, such as Claude Code or Codex CLI. Add an outer host or wrapper with optional `via <host>`. For multiple models, use `Generated with <model 1> for <job 1> and <model 2> for <job 2> in <harness>.`; `and` separates model/job pairs exclusively, and commas or `/` list multiple jobs for one model.
 - When implementing a new feature/fix:
   1. Packet: before filing or commenting on a GitHub issue, read [.agents/skills/issue-packet/SKILL.md](.agents/skills/issue-packet/SKILL.md).
   2. Branch from `main`: `feature/issue-number-short-description`
@@ -397,3 +396,7 @@ test "$reviewed" = "$head"
 When you need up-to-date information about technologies used in this project, use the `btca-local` skill to search the actual source repos. `btca.config.jsonc` is the resource registry; every resource is pre-cloned at `~/.btca/agent/sandbox/<resourceName>` (e.g. `fastmcp`, `playwrightPython`). "Use btca with `<resource>` resource" means: search that clone. If a resource is missing from the sandbox, clone it with the url and branch from the manifest (the skill's "clone main by default" does not apply to registered resources).
 
 **New dependencies:** When adding a new dependency, always add its repo to `btca.config.jsonc` (verify the default branch first: `gh api repos/OWNER/REPO --jq '.default_branch'`) and clone it into the sandbox. Resource names are shared across projects in the sandbox, so pick a name that identifies the repo unambiguously (`playwrightPython`, not `playwright`).
+
+## Git attribution
+
+Commits and PRs carry only the human git user who owns the task. Never add an AI co-author, "Generated with", or "Made with" line. See `.cursor/rules/no-ai-commit-attribution.mdc`.
